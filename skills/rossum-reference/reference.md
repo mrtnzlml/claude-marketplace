@@ -2,13 +2,42 @@
 
 ## Platform Overview
 
-Rossum.ai is a cloud-based document automation platform specializing in AI-powered data extraction from business documents (invoices, purchase orders, receipts, etc.). The platform provides:
+Rossum.ai is a cloud-based enterprise automation platform for processing transactional documents (invoices, purchase orders, bills of lading, receipts, etc.). The platform provides:
 
-- AI-powered data extraction from documents
-- Cloud-based user interface for verification and correction
-- Extension environment for custom logic (webhooks, serverless functions)
-- Reporting database
+- **Aurora AI Engine**: Proprietary Transactional Large Language Model (T-LLM) supporting 276 languages and handwriting (30 languages), with zero hallucinations via discriminative decoder
+- **Cloud-based UI** for verification and correction of extracted data
+- **Extension environment** for custom logic (webhooks, serverless functions, formula fields, TxScript)
+- **Master Data Hub** for matching extracted data against system records
+- **Built-in extensions**: Business Rules Validation, Duplicate Detection, Copy & Paste, Find & Replace, Value Mapping, Line Items Grouping
+- **Export pipeline** for structured data delivery (REST API, SFTP, S3)
+- **Embedded mode** for integrating Rossum's validation UI into third-party apps
+- **Sandboxes** for isolated development and deployment workflows
+- **Reasoning fields** (inline LLM fields) for AI-generated values based on prompts
+- Reporting database and audit logs
 - API for programmatic access
+
+### Five-Stage Processing Pipeline
+
+1. **Document Receipt**: Ingestion via email, API upload, SFTP/S3, EDI, shared drives (PDF, XML, JSON, UBL, images)
+2. **Document Understanding**: Aurora AI extracts data with confidence scores, filters spam/duplicates, classifies documents
+3. **Data Validation & Enrichment**: Business rules, master data matching, computed fields (GL codes, tax codes), cross-validation
+4. **Automated Actions**: Approval workflows, notifications, integration with downstream systems
+5. **Insights & Compliance**: Audit trails, document archiving, performance reporting
+
+### Aurora AI Engine
+
+Aurora is Rossum's proprietary T-LLM trained on hundreds of millions of transactional documents:
+
+- **Pre-trained fields** for immediate extraction (focused on AP/AR scenarios)
+- **Continuous learning** from user-confirmed documents (no manual retraining needed)
+- **10x fewer training examples** needed vs. traditional models
+- **Discriminative decoder** prevents hallucinations and prompt injection
+- **Confidence scores** on every extracted field for threshold-based automation
+- Documents must be **confirmed/exported by a human** (not automated) to trigger learning
+- **Value Source must be "Captured"** for AI-driven extraction learning
+- Does **not** currently support: handwritten data extraction (except 30 languages), watermark recognition
+
+**Queue strategy**: Separate queues when different field sets apply, or for documents in different scripts/regions
 
 ### Architecture Hierarchy
 
@@ -1040,3 +1069,343 @@ Records include: user, action type (create/update/delete/export), timestamp, aff
 | GET | `/v1/hook_logs` | List hook execution logs |
 
 Records include: request sent, response received, timestamp, duration, success/failure, error messages.
+
+---
+
+## TxScript & Formula Fields
+
+TxScript is Rossum's Python-based scripting language used in both **Formula Fields** (schema-level computed fields) and **Serverless Functions** (hook-level custom logic).
+
+### Formula Fields
+
+Formula fields are schema datapoints of type `formula` that compute derived values. They execute automatically before and after extensions.
+
+**Key characteristics**:
+- Max 2000 characters per formula
+- Cannot make HTTP requests or access document objects
+- Extensions cannot overwrite formula field values (use a separate "data" field instead)
+- A formula field must never reference itself (circular reference error)
+- For 200+ row operations, prefer serverless functions
+
+### TxScript Syntax Reference
+
+**Field access**:
+```python
+field.amount                          # Get field value
+field.amount.id                       # System ID
+field.amount.attr.rir_confidence      # AI confidence score
+field.amount.attr.ocr_raw_text        # OCR extracted text
+field.amount.attr.rir_raw_text        # RIR extracted text
+field.table_name[0].column_name       # Table cell access
+field._index                          # Line item index (0-based)
+field.column_name.all_values          # All values in a line item column (as list)
+field.column_name.attr.value          # Original string formatting
+field.enum_field.attr.options          # Enum options
+```
+
+**Annotation data access**:
+```python
+annotation.id                          # Annotation ID
+annotation.metadata                    # Metadata dict
+annotation.document.original_file_name # Document filename
+annotation.email.subject               # Email subject
+```
+
+**Conditional checks**:
+```python
+is_set(field.amount)                   # True if field has value
+is_empty(field.amount)                 # True if field is empty
+default_to(field.amount, 0)            # Fallback value for empty fields
+```
+
+**String operations**:
+```python
+substitute(r"[^0-9]", r"", field.document_id)  # Regex substitution
+re.sub(r"[^0-9]", r"", field.document_id)      # Direct regex
+```
+
+**Messaging** (display to user in UI):
+```python
+show_info("message")                   # Info message (global)
+show_info("message", field.amount)     # Info message on specific field
+show_warning("message")                # Warning message
+show_warning("message", field.amount)  # Warning on field
+show_error("message")                  # Error - ALWAYS blocks automation
+show_error("message", field.amount)    # Error on field
+```
+
+**Automation blockers** (explicitly block automation without error):
+```python
+automation_blocker("message", field.amount)
+```
+
+**Pre-imported modules**: `datetime`, `timedelta`, `date`, `re`
+
+**Date operations**:
+```python
+field.date_issue.year                  # Year from date field
+field.date_issue.month                 # Month from date field
+datetime.datetime.now().date()         # Current date
+```
+
+**Line item handling**: Formulas on line items execute per-row. Use `all_values` to aggregate across rows:
+```python
+line_items_sum = sum(default_to(field.item_amount_total.all_values, 0))
+```
+
+**No return statements**: The last expression evaluated is automatically used as the output.
+
+### Serverless Functions (TxScript Flavor)
+
+Serverless functions use the `rossum_hook_request_handler` entry point with the TxScript runtime:
+
+```python
+from txscript import TxScript
+
+def rossum_hook_request_handler(payload):
+    t = TxScript.from_payload(payload)
+
+    # Read fields
+    order_id = t.field.order_id
+
+    # Write fields (serverless only)
+    t.field.order_id_normalized = order_id.upper()
+
+    # Set multivalue fields
+    t.field.multivalue_field.all_values = ["AAA", "BBB"]
+
+    # Set enum options dynamically
+    t.field.enum_field.attr.options = [{"label": "Option A", "value": "a"}]
+    t.field.enum_field = "a"
+
+    # Messages
+    t.show_info("Processing complete")
+    t.show_error("Invalid amount", t.field.amount)
+    t.automation_blocker("Needs review", t.field.vendor_name)
+
+    return t.hook_response()
+```
+
+**Payload structure** includes: `rossum_authorization_token`, `schema`, `document`, `annotations`, `settings`, `secrets`, `updated_datapoints` (list of recently modified field IDs)
+
+**Enable TxScript in serverless**: In webhook settings, enable "Schemas" under "Additional notification metadata"
+
+**Backward compatibility**: `from rossum_python import RossumPython` also supported
+
+**Best practices**:
+- Python 3.12 runtime (AWS Lambda-style)
+- Store configuration in `hook.settings` JSON, not hardcoded
+- Store secrets via `hook.secrets_schema`
+- Use `print()` for debugging (output in Extensions → Logs → Detail → "output" key)
+- Prefer single-threaded; use `asyncio`/`httpx` only for I/O-bound parallel operations
+- Catch specific exceptions, not broad `Exception`
+
+---
+
+## Reasoning Fields
+
+Reasoning fields are "inline LLM fields" that generate predictions based on configured prompts. Schema type: `reasoning`.
+
+**Key characteristics**:
+- Best for single-value, single-task extraction (e.g., extract country code from address)
+- Aggressive caching: identical inputs produce identical outputs even when prompt changes
+- Not suitable for tasks requiring high accuracy or reproducibility (use formula fields for math)
+- Can be overridden from UI unless edit option is disabled
+- Always validate outputs with business rules when possible
+
+**Configuration**: Add field of type "reasoning" in queue schema with a structured prompt covering guidelines, field logic, fallback procedures, and examples.
+
+---
+
+## Master Data Hub
+
+The Master Data Hub matches extracted document data against uploaded reference datasets (vendor lists, GL codes, PO data, customer records).
+
+**Capabilities**:
+- Validate vendors against existing databases
+- Match purchase orders for invoices
+- Match individual line items
+- Support multiple data formats: `.json`, `.xml`, `.csv`, `.xlsx`
+
+**Setup**: Available in Rossum Store as "Data matching v2". Requires admin-role token owner.
+
+**Configuration**:
+1. **Dataset**: Upload reference data (vendors, POs, etc.)
+2. **Matching queries**: MongoDB-style syntax, executed sequentially until match found
+3. **Result field**: Must be an `enum`-type schema field (`"type": "enum", "options": []`)
+4. **Result actions**: Define behavior for zero, one, or multiple matches (error/warning/info)
+5. **Default values**: Fallback when no matches occur
+
+**Query types**:
+- **Exact matching**: `{"find": {"fieldName": "{schema_id}"}}`
+- **Fuzzy matching**: Matches similar values within an error range (advanced, not in UI)
+
+**Cross-configuration**: Later configurations can reference values from previous matches.
+
+**Tip**: For numeric data types, use `"enum_value_type": "number"` for proper type conversion.
+
+**API**: `https://elis.rossum.ai/svc/master-data-hub/api/docs`
+
+---
+
+## Business Rules Validation
+
+Validates extracted data using an expression engine. Runs at end of extension chain to prevent confirmation/automation of invalid documents.
+
+**Configuration**:
+```json
+{
+  "checks": [
+    {
+      "rule": "has_value({document_id})",
+      "message": "Invoice number must not be empty",
+      "type": "error",
+      "automation_blocker": true,
+      "active": true,
+      "queue_ids": [],
+      "condition": ""
+    }
+  ]
+}
+```
+
+### Expression Engine Syntax
+
+**Operators**: `+`, `-`, `/`, `//`, `*`, `%`, `and`, `or`, `xor`, `==`, `!=`, `<`, `>`, `<=`, `>=`
+
+**Data types**: integer, float, string, date. Auto-cast order: float → integer → date → string.
+
+**Manual casting**: `int()`, `float()`, `date()` (requires `YYYY-MM-DD`), `str()`
+
+**Empty checks**: `has_value({field})`, `is_empty({field})` (do NOT use `== ''`)
+
+**Aggregation**: `all()`, `any()`, `sum()`, `min()`, `max()`, `len()`, `unique_len()`, `first_value()`
+
+**Filter**: `filter({column}, [0, None])` — removes specified values
+
+**Defaults**: `{value, default=0}` or `{value, default=value('other_field')}`
+
+**Date functions**: `today()`, `timedelta(days=N)`, `timedelta(years=N, months=N)`
+
+**String functions**: `substring(search, value)`, `regexp(pattern, value, ignore_case=True)`, `similarity(value, search)` (Levenshtein), `list_contains(column, search)`
+
+**Examples**:
+```
+{issue_date} > "2023-01-01"
+{item_price} * {item_amount} == {item_total}
+sum({item_total}) == {total_price}
+today() + timedelta(days=2) > {due_date}
+```
+
+**Limitation**: One rule can only work with one table.
+
+---
+
+## Duplicate Detection
+
+Detects duplicate documents based on configurable rules. Available in Rossum Store.
+
+**Three rule types**:
+1. **Field**: Compares specific datapoint schema IDs (e.g., `document_id`)
+2. **Filename**: Matches based on document filenames
+3. **Relation**: Identifies duplicates through file hash
+
+**Scope levels**: Queue, Workspace, or Organization
+
+**Status filtering**: Rules can target documents in specific states (`to_review`, `confirmed`, `exported`, etc.)
+
+**Matching logic**: Rules can be combined with AND/OR: `["1and2", "3"]` means "(rule 1 AND rule 2) OR rule 3"
+
+**Actions**: When duplicates detected, can fill fields (e.g., set `is_rossum_duplicate` to true)
+
+**Trigger events**: `annotation_content` with actions `initialize`, `started`, `user_update`, `updated`
+
+---
+
+## Built-in Extensions (Rossum Store)
+
+### Copy & Paste Values *(deprecated)*
+Copies values from one field to another based on conditions. Configuration uses source-to-target field mapping with conditional expressions.
+
+### Find & Replace Values *(deprecated)*
+Finds and replaces extracted values using Python `re.sub()`. Used for cleaning/normalizing data (e.g., removing non-alphanumeric characters from IBAN fields).
+
+### Value Mapping
+Maps values from one field to specific predefined values in another field.
+
+### Line Items Grouping
+Groups line items based on SQL criteria. Useful when downstream systems require one unique line item per invoice. Available as webhook extension with region-specific endpoints.
+
+### Automation Unblocker
+Unblocks specified datapoints when conditions are met. Evaluates fields and updates `validation_sources` to enable automation. Conditions: `value_existence` (non-empty value) or `single_option` (exactly one enum option + non-empty).
+
+---
+
+## Export Pipeline
+
+Chains sequential components for structured data delivery:
+
+1. **Custom Format Templating Purge**: Cleans pipeline for export
+2. **Custom Format Templating**: Structures data into desired output format
+3. **REST API Export**: Sends data to REST API, stores reply
+4. **Data Value Extractor**: Extracts info from API responses (downstream IDs, HTTP status)
+5. **Export Evaluator**: Determines success/failure (e.g., check for HTTP 200/201)
+6. **SFTP/S3 Export**: Uploads to file storage
+
+Components connect via "run-after" extension chaining.
+
+---
+
+## SFTP & S3 Import/Export
+
+Available extensions for file storage integration:
+
+**Import extensions**: Import Master Data From SFTP/S3, Import Documents From SFTP/S3
+
+**Export extensions**: Export To SFTP/S3
+
+**Configuration**: JSON with credentials (host, port, auth type), import rules (dataset names, file formats, regex patterns), and result actions (archive/failed directories).
+
+**Trigger**: "Scheduled" for imports, "Export" for exports. Region-specific endpoints (EU1/EU2/US/JP).
+
+---
+
+## Structured Formats Import
+
+Processes non-visual documents (XML, JSON, EDI) by extracting data and rendering a PDF representation for review.
+
+**Setup**: Requires enabling XML/JSON MIME types. Uses webhook extension triggered on `upload.created`.
+
+**Configuration**: Maps source data to datapoints using XPath (XML) or JSONPath (JSON) selectors. Supports file splitting and embedded PDF extraction.
+
+---
+
+## Embedded Mode
+
+Rossum's validation interface can be embedded in third-party applications via:
+- `POST /v1/annotations/{id}/start_embedded` — Launch embedded annotation
+- `POST /v1/annotations/{id}/create_embedded_url` — Generate temporary URL
+
+Useful when out-of-the-box Rossum dashboards don't fit the use case.
+
+---
+
+## Sandboxes
+
+Sandboxes enable isolated development and deployment workflows. Paid feature requiring Rossum Sales involvement.
+
+**Tooling**: `deployment-manager` CLI (`prd2` command) from GitHub.
+
+**Key commands**: `deploy` (source → target), `pull` (download objects locally), `push` (update local → Rossum), `init` (create project), `purge` (delete objects)
+
+**Configuration**: `credentials.yaml` with API token, region-specific API URLs.
+
+**Workflow**: Develop in sandbox organization → test → deploy to production via `prd2 deploy`.
+
+---
+
+## Integrations
+
+Pre-built integrations available for: **SAP**, **Coupa**, **NetSuite**, **Workday**, **Microsoft Dynamics**, **Oracle**, **Xero**, **QuickBooks**.
+
+Integration architecture supports low-code extensions, editable code, and turnkey integrations via microservices.
