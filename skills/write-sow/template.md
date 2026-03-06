@@ -5,11 +5,10 @@
 | **Date** | [YYYY-MM-DD] |
 | **Version** | 1.0 |
 | **Customer** | [Customer name] |
-| **Rossum Contact** | [Name, role] |
 
 ## 1. Purpose
 
-[Brief description of the project: what business problem it solves, what document types will be processed, expected volumes, and what systems Rossum will integrate with. Keep to 2–4 sentences.]
+[Brief description of the project: what business problem it solves, what document types will be processed, expected volumes, and what systems Rossum will integrate with. Keep to 2–4 sentences. When the project involves multiple systems or a non-trivial data flow, include an ASCII diagram showing the high-level flow (e.g., document source → Rossum → export destination).]
 
 ## 2. Deliverables
 
@@ -23,18 +22,11 @@
 - [Explicit exclusion — what this project does NOT cover]
 - …
 
-## 3. Customer Requirements
+## 3. Timeline
 
-The following are required from Customer for Rossum to deliver the scope above. Delays in meeting these requirements may impact the timeline.
+Keep this section short — only list key milestones, not every task.
 
-| # | Requirement | Needed By |
-|---|-------------|-----------|
-| 1 | [What Customer must provide or do] | [Milestone name or date] |
-| 2 | … | … |
-
-## 4. Timeline
-
-| Milestone | Target Date | Dependencies |
-|-----------|-------------|--------------|
-| [Milestone name] | [YYYY-MM-DD or T+N weeks] | [External blockers, or —] |
-| … | … | … |
+| Milestone | Target Date | Deliverables | Customer Requirements |
+|-----------|-------------|--------------|----------------------|
+| [Milestone name] | [YYYY-MM-DD or T+N weeks] | [Deliverable #s from Section 2, or —] | [What Customer must provide by this date, or —] |
+| … | … | … | … |

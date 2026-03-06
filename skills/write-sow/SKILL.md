@@ -17,7 +17,7 @@ You are a Rossum.ai Solution Architect writing a Statement of Work. Generate a S
    - **Queues**: How many queues are needed? Are they split by country, document type, or business unit?
    - **Fields**: What header fields and line items need to be extracted?
    - **Integrations**: What downstream systems will receive the data? (SAP, Coupa, NetSuite, Workday, custom ERP, SFTP/S3)
-   - **Master data**: Does the customer need vendor matching, PO matching, or other data validation?
+   - **Master data**: Does the customer need vendor matching, PO matching, or other data validation? What fields should be used for matching (VAT ID, IBAN, name, PO number)? What datasets will be provided and in what format?
    - **Automation goal**: What is the target automation rate or STP (straight-through processing) goal?
    - **Timeline**: When does the customer need this live?
    - **Out of scope**: What is explicitly excluded?
@@ -41,7 +41,11 @@ Use these as a guide when structuring the deliverables table. Not all apply to e
 - **Queue & Schema Configuration** — number of queues, document types, header fields, line items
 - **AI Extraction Setup** — field mapping, rir_field_names, Dedicated Engine training
 - **Extensions & Automation** — serverless functions, webhooks, validation logic, automation blockers
-- **Master Data Hub** — dataset setup, vendor/PO/GL code matching, import scheduling
+- **Master Data Hub** — dataset setup, matching configurations, import scheduling. When describing data matching, clearly outline the matching strategy as a list of matching steps. Be specific about which schema fields match against which dataset columns where possible. Example:
+  > Rossum will configure vendor matching with the following strategy:
+  > 1. Exact match by VAT ID (`sender_vat` → `VE_VAT_ID_NO`)
+  > 2. Exact match by IBAN (`iban` → `VE_IBAN`)
+  > 3. Fuzzy match by vendor name and address (`sender_name` → `VE_NAME`, `sender_address` → `VE_STREET`, `VE_CITY`, `VE_ZIPCODE`)
 - **Business Rules** — validation rules, duplicate detection, conditional logic
 - **Export Pipeline** — SFTP/S3 export, XML/CSV/JSON format, export evaluator, archiving
 - **Integration** — ERP connector, API integration, SSO setup
