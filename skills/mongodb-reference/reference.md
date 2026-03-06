@@ -24,6 +24,14 @@ In all queries, `{schema_id}` references the current value of a schema field fro
 
 Here `{sender_vat}` is replaced with the actual extracted VAT number before the query runs.
 
+> **Important**: The examples in this reference use generic placeholder names like `{sender_vat}`, `{sender_name}`, and dataset fields like `"Vendor Name"`, `"vat_number"`. When writing real queries, you **must use the actual schema IDs and dataset field names** from the customer's implementation. Discover these by:
+>
+> 1. Reading the **schema JSON** to find real field `id` values (e.g., `invoice_id`, `vendor_name_normalized`, `po_line_number`)
+> 2. Reading the **dataset** structure to find real column names (e.g., `VE_NAME`, `VE_VAT_ID_NO`, `BP_STREET1`)
+> 3. Checking **existing matching configurations** for field naming conventions already in use
+>
+> Never copy example field names verbatim — always substitute with the actual identifiers from the project.
+
 ### Pipe Modifiers
 
 Placeholders support pipe modifiers for transforming values before substitution:
