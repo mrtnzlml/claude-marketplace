@@ -652,52 +652,126 @@ Combine multiple search criteria with boolean logic and boosting.
 }
 ```
 
-### Search Score Normalization
+### Search Score Filtering with Dynamic Thresholds
 
-Raw search scores are not normalized (they depend on index size, document frequency, etc.). To normalize to a 0–1 range:
+Raw search scores are not normalized — they depend on index size, document frequency, and query complexity. A static threshold often fails: too high and you miss valid matches, too low and you get false positives. The recommended approach uses **statistical analysis** of the result set to compute a dynamic threshold.
 
-**Using `$setWindowFields`:**
+The technique uses `$setWindowFields` to compute count, average, max, and standard deviation across all results, then applies different threshold strategies depending on result count:
+
+- **Few results (≤ 2)**: Use 90% of max score — almost certainly a good match
+- **Many results (> 2)**: Use mean + 1.5× standard deviation (capped at max) — filters statistical outliers
+
+Additionally, enforce an **absolute minimum score** to reject results that are too weak regardless of distribution.
+
 ```json
 {
   "aggregate": [
     {
       "$search": {
-        "text": {
-          "query": "{sender_name}",
-          "path": "Vendor Name",
-          "fuzzy": { "maxEdits": 1 }
+        "index": "default",
+        "compound": {
+          "must": [
+            {
+              "text": {
+                "path": "VE_NAME",
+                "query": "{sender_name} "
+              }
+            }
+          ],
+          "should": [
+            {
+              "text": {
+                "path": ["VE_STREET", "VE_CITY", "VE_ZIPCODE"],
+                "query": "{sender_address} "
+              }
+            }
+          ]
         }
       }
     },
+    { "$limit": 50 },
     {
       "$addFields": {
-        "__rawScore": { "$meta": "searchScore" }
+        "__searchScore": { "$meta": "searchScore" }
       }
     },
     {
       "$setWindowFields": {
         "output": {
-          "__maxScore": { "$max": "$__rawScore" }
+          "__docCount": { "$count": {} },
+          "__avgSearchScore": { "$avg": "$__searchScore" },
+          "__maxSearchScore": { "$max": "$__searchScore" },
+          "__stdDevSearchScore": { "$stdDevPop": "$__searchScore" }
         }
       }
     },
     {
       "$addFields": {
-        "__normalizedScore": {
+        "__dynamicSearchScoreThreshold": {
           "$cond": {
-            "if": { "$eq": ["$__maxScore", 0] },
-            "then": 0,
-            "else": { "$divide": ["$__rawScore", "$__maxScore"] }
+            "if": { "$lte": ["$__docCount", 2] },
+            "then": { "$multiply": ["$__maxSearchScore", 0.9] },
+            "else": {
+              "$min": [
+                "$__maxSearchScore",
+                {
+                  "$add": [
+                    "$__avgSearchScore",
+                    { "$multiply": ["$__stdDevSearchScore", 1.5] }
+                  ]
+                }
+              ]
+            }
           }
         }
       }
     },
     {
-      "$match": { "__normalizedScore": { "$gte": 0.5 } }
+      "$match": {
+        "$expr": {
+          "$gte": ["$__searchScore", "$__dynamicSearchScoreThreshold"]
+        },
+        "__searchScore": { "$gte": 1.08 }
+      }
+    },
+    { "$sort": { "__searchScore": -1 } },
+    { "$limit": 10 },
+    {
+      "$project": {
+        "_id": 0,
+        "VE_CITY": 1,
+        "VE_IBAN": 1,
+        "VE_NAME": 1,
+        "VE_STREET": 1,
+        "VE_COUNTRY": 1,
+        "VE_ZIPCODE": 1,
+        "VE_TAX_ID_NO": 1,
+        "VE_VAT_ID_NO": 1,
+        "VE_VENDOR_NO": 1
+      }
     }
   ]
 }
 ```
+
+**Key elements of this pattern:**
+
+| Element | Purpose |
+|---------|---------|
+| `"$limit": 50` | Cap initial results to prevent expensive window computations |
+| `$setWindowFields` | Compute statistics (count, avg, max, stddev) across the entire result set |
+| `$cond` on `__docCount` | Switch threshold strategy based on result set size |
+| `0.9 × max` | For ≤ 2 results: accept if score is within 90% of the best match |
+| `avg + 1.5 × stddev` | For > 2 results: accept only statistical outliers (high scorers) |
+| `$min` with max | Cap the dynamic threshold at the maximum score |
+| `__searchScore >= 1.08` | Absolute minimum — reject weak matches regardless of distribution |
+| `$project` | Return only the fields needed for mapping |
+
+**Tuning the parameters:**
+- Increase the `1.5` multiplier on stddev to be more selective (fewer results)
+- Decrease it to be more permissive (more results)
+- Adjust the absolute minimum (`1.08`) based on your data — test with the "Try" button
+- The `0.9` factor for few-result sets can be lowered if near-matches are acceptable
 
 ### Other Search Operators
 
@@ -759,32 +833,49 @@ Try VAT first, fall back to IBAN, then name.
 }
 ```
 
-### Pattern 5: Fuzzy Vendor Name with Score Threshold
+### Pattern 5: Fuzzy Vendor Name with Dynamic Score Threshold
+
+Uses compound search with `must`/`should` and statistical score filtering. See the "Search Score Filtering with Dynamic Thresholds" section above for the full pattern with `$setWindowFields`, dynamic threshold computation (mean + 1.5× stddev), and absolute minimum score.
+
+Simplified version with static threshold for simpler use cases:
 
 ```json
 {
   "aggregate": [
     {
       "$search": {
-        "text": {
-          "query": "{sender_name}",
-          "path": "Vendor Name",
-          "fuzzy": {
-            "maxEdits": 1,
-            "prefixLength": 2
-          }
+        "index": "default",
+        "compound": {
+          "must": [
+            {
+              "text": {
+                "path": "Vendor Name",
+                "query": "{sender_name} "
+              }
+            }
+          ],
+          "should": [
+            {
+              "text": {
+                "path": ["Street", "City", "Zipcode"],
+                "query": "{sender_address} "
+              }
+            }
+          ]
         }
       }
     },
-    { "$limit": 5 },
+    { "$limit": 50 },
     {
       "$addFields": {
-        "__score": { "$meta": "searchScore" }
+        "__searchScore": { "$meta": "searchScore" }
       }
     },
     {
-      "$match": { "__score": { "$gt": 0.5 } }
-    }
+      "$match": { "__searchScore": { "$gte": 1.0 } }
+    },
+    { "$sort": { "__searchScore": -1 } },
+    { "$limit": 10 }
   ]
 }
 ```
