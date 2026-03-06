@@ -55,3 +55,17 @@ Description of how deliverables will be reviewed and accepted.
 3. Write the SOW as a new markdown file in the current working directory named `SOW-[project-name].md`.
 4. Keep language clear, professional, and unambiguous.
 5. Use concrete, measurable criteria wherever possible.
+6. Always use future tense throughout the document (e.g., "Rossum will deliver...", "Rossum will implement...", "Rossum will provide..."). The subject should be "Rossum" where appropriate.
+7. When referring to the customer, always use "Customer" (capitalized), never their specific name or "the client".
+8. Where appropriate, use the following defined terms consistently (these align with the legal contract):
+   - **"Annotate"**: to capture all values into the corresponding fields and confirm the results in the Cloud Based Technology.
+   - **"Cloud Based Technology"**: Rossum's cloud based technology for data extraction from documents, the cloud based user interface for verification and correction of the extracted data, the extension environment and the reporting database.
+   - **"Customer Data"**: all information, data or other materials inputted into the Cloud Based Technology by Customer or otherwise on its behalf, including information automatically extracted from Customer documents and information manually corrected on the Cloud Based Technology by or on behalf of a Customer.
+   - **"Dedicated Engine"**: a custom document processing AI model trained for a particular use case requiring previous customer's annotations or other customer cooperation as agreed between the parties.
+   - **"DE Training"**: a process of training a Dedicated Engine.
+   - **"Extension"**: a webhook or a server-less function that extends the Cloud Based Technology behavior in a certain way.
+   - **"Header Fields"**: fields in a document that are not structured as a table.
+   - **"Line Items"**: fields in a document that are structured as a table.
+   - **"Queue"**: an extraction pipeline of documents. Each account in the Cloud Based Technology can have multiple queues.
+   - **"Schema"**: an object specifying a set of values that are extracted from a document.
+   - **"SSO"** or **"Single Sign-on"**: a method that enables users to log in to multiple applications with one set of credentials.
