@@ -24,6 +24,10 @@ A comprehensive Rossum.ai platform reference (API, TxScript, Aurora AI, Master D
 
 A MongoDB query language reference tailored for Rossum.ai Master Data Hub. Covers find queries, aggregation pipelines, Atlas Search, operators, and practical matching patterns for data matching configurations. Auto-loaded when relevant.
 
+### prd2 Reference (auto-loaded)
+
+A reference for the prd2 CLI tool used to manage Rossum configurations across environments. Covers pull, push, deploy, purge, and hook commands, deploy files, attribute overrides, credentials, and project structure. Auto-loaded when relevant.
+
 ## Installation
 
 ### Test locally
@@ -62,6 +66,9 @@ rossum-claude-plugin/
     ├── document-implementation/
     │   └── SKILL.md
     ├── mongodb-reference/
+    │   ├── SKILL.md
+    │   └── reference.md
+    ├── prd-reference/
     │   ├── SKILL.md
     │   └── reference.md
     ├── rossum-reference/
