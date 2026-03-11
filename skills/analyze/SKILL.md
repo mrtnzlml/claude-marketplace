@@ -44,7 +44,12 @@ With the full picture from Phase 1, check for these issues:
 - **Contradictory rules** — rules where one requires what another forbids
 - **Environment drift** — configuration differences between dev/test/prod environments that look unintentional (not just ID differences)
 - **Plain-text secrets** — credentials, API keys, or secrets committed in plain text
-- **Data Storage mismatches** — if the `rossum-data-storage` MCP tools are available, use `data_storage_list_collections` to verify that collection names referenced in MDH matching hook configs actually exist, and `data_storage_list_indexes` to check that required indexes are in place
+- **Data Storage mismatches** — if the `rossum-data-storage` MCP tools are available, verify MDH matching hook configs against live Data Storage:
+  - Use `data_storage_list_collections` to check that every collection name referenced in matching configs actually exists
+  - For each referenced collection, use `data_storage_list_indexes` and `data_storage_list_search_indexes` to retrieve its indexes
+  - Cross-reference the matching query fields (from hook settings) against the available indexes. Flag fields used in `$match`, `$sort`, or `$search` stages that have no supporting index — these cause full collection scans and degrade matching performance
+  - Flag collections that have Atlas Search indexes but whose matching config uses a plain `find`/`aggregate` query instead of `$search` (missed optimization), or vice versa
+  - Flag duplicate or redundant indexes on the same collection (waste of storage and write overhead)
 
 Only report issues you actually find. Do not report speculative or generic concerns. Ground every finding in specific files and line numbers.
 
