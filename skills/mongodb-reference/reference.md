@@ -441,6 +441,14 @@ The `$function` operator runs custom JavaScript within an aggregation pipeline. 
           "$options": "i"
         }
       }
+    },
+    {
+      "$project": {
+        "_id": 0,
+        "Vendor Name": 1,
+        "vat_number": 1,
+        "vendor_id": 1
+      }
     }
   ]
 }
@@ -497,7 +505,17 @@ Join documents from another dataset/collection.
       }
     },
     { "$unwind": "$addresses" },
-    { "$match": { "addresses.country": "{sender_country}" } }
+    { "$match": { "addresses.country": "{sender_country}" } },
+    {
+      "$project": {
+        "_id": 0,
+        "vendor_id": 1,
+        "vat_number": 1,
+        "addresses.street": 1,
+        "addresses.city": 1,
+        "addresses.country": 1
+      }
+    }
   ]
 }
 ```
@@ -655,7 +673,14 @@ Combine multiple search criteria with boolean logic and boosting.
         "__searchScore": { "$gt": 0.1 }
       }
     },
-    { "$sort": { "__searchScore": -1 } }
+    {
+      "$project": {
+        "_id": 0,
+        "Vendor Name": 1,
+        "vat_number": 1,
+        "vendor_id": 1
+      }
+    }
   ]
 }
 ```
@@ -742,7 +767,6 @@ Additionally, enforce an **absolute minimum score** to reject results that are t
         "__searchScore": { "$gte": 1.08 }
       }
     },
-    { "$sort": { "__searchScore": -1 } },
     { "$limit": 10 },
     {
       "$project": {
@@ -889,13 +913,7 @@ Key index elements:
         }
       }
     },
-    { "$limit": 10 },
-    {
-      "$addFields": {
-        "__searchScore": { "$meta": "searchScore" }
-      }
-    },
-    { "$sort": { "__searchScore": -1 } }
+    { "$limit": 10 }
   ]
 }
 ```
@@ -996,8 +1014,18 @@ Simplified version with static threshold for simpler use cases:
     {
       "$match": { "__searchScore": { "$gte": 1.0 } }
     },
-    { "$sort": { "__searchScore": -1 } },
-    { "$limit": 10 }
+    { "$limit": 10 },
+    {
+      "$project": {
+        "_id": 0,
+        "Vendor Name": 1,
+        "Street": 1,
+        "City": 1,
+        "Zipcode": 1,
+        "vat_number": 1,
+        "vendor_id": 1
+      }
+    }
   ]
 }
 ```
@@ -1041,7 +1069,16 @@ Simplified version with static threshold for simpler use cases:
         }
       }
     },
-    { "$limit": 5 }
+    { "$limit": 5 },
+    {
+      "$project": {
+        "_id": 0,
+        "Vendor Name": 1,
+        "country": 1,
+        "vat_number": 1,
+        "vendor_id": 1
+      }
+    }
   ]
 }
 ```
@@ -1060,7 +1097,15 @@ When a query returns duplicate vendor records (e.g., same vendor with multiple a
         "doc": { "$first": "$$ROOT" }
       }
     },
-    { "$replaceRoot": { "newRoot": "$doc" } }
+    { "$replaceRoot": { "newRoot": "$doc" } },
+    {
+      "$project": {
+        "_id": 0,
+        "vendor_id": 1,
+        "vat_number": 1,
+        "name": 1
+      }
+    }
   ]
 }
 ```
@@ -1089,6 +1134,14 @@ Strip non-alphanumeric characters before comparing:
           "$regex": "^{sender_vat | re}$",
           "$options": "i"
         }
+      }
+    },
+    {
+      "$project": {
+        "_id": 0,
+        "vat_number": 1,
+        "vendor_id": 1,
+        "name": 1
       }
     }
   ]
@@ -1130,7 +1183,16 @@ Sort matches to prefer flagged/preferred vendors:
         }
       }
     },
-    { "$sort": { "__preferred_sort": 1 } }
+    { "$sort": { "__preferred_sort": 1 } },
+    {
+      "$project": {
+        "_id": 0,
+        "vendor_id": 1,
+        "vat_number": 1,
+        "name": 1,
+        "is_preferred": 1
+      }
+    }
   ]
 }
 ```
@@ -1245,10 +1307,11 @@ This ensures proper type conversion when matched values are used in subsequent n
 2. **Use `$limit` after `$search`** — prevents processing thousands of fuzzy results
 3. **Prefer native operators over `$function`** — JavaScript execution is significantly slower
 4. **Use exact match queries first** in the query sequence — they are fastest; fall back to fuzzy/regex only when exact match fails
-5. **Use `$project` to reduce fields** — only carry forward fields you need
-6. **Avoid `$where`** — JavaScript-based filtering is the slowest query option
-7. **Use indexes** — ensure frequently queried fields are indexed in the dataset
-8. **Score thresholds** — always filter fuzzy results by score to prevent false positives
+5. **Always use `$project` as the final stage** — return only the fields needed for mapping; large documents slow down the matching engine and waste bandwidth
+6. **Avoid unnecessary `$sort` by search score** — `$search` already returns results sorted by relevance; adding `{ "$sort": { "__searchScore": -1 } }` is redundant unless you re-score or filter results after the initial search
+7. **Avoid `$where`** — JavaScript-based filtering is the slowest query option
+8. **Use indexes** — ensure frequently queried fields are indexed in the dataset
+9. **Score thresholds** — always filter fuzzy results by score to prevent false positives
 
 ---
 
