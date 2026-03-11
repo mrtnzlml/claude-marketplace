@@ -798,6 +798,120 @@ Additionally, enforce an **absolute minimum score** to reject results that are t
 | `queryString` | Lucene-style query string syntax |
 | `embeddedDocument` | Search within nested/embedded documents |
 
+### Embedded Document Search with `returnScope`
+
+When documents contain arrays of nested objects (e.g., invoice line items inside an invoice), use `embeddedDocument` field mappings with `returnScope` to search and return individual embedded documents rather than the entire parent. This is useful for matching against specific line items, positions, or other nested records.
+
+Documentation: https://www.mongodb.com/docs/atlas/atlas-search/return-scope/
+
+**Required index definition:**
+
+The field containing embedded documents must be mapped as `type: "embeddedDocuments"` with `storedSource` listing the fields to return. Parent-level fields used for filtering need their own mappings.
+
+```json
+{
+  "collectionName": "invoices_v1",
+  "indexName": "search_invoice_embedded_line_items",
+  "mappings": {
+    "dynamic": false,
+    "fields": {
+      "invoice-number": {
+        "type": "string",
+        "analyzer": "lucene.keyword"
+      },
+      "invoice-lines": {
+        "type": "embeddedDocuments",
+        "fields": {
+          "description": {
+            "type": "string",
+            "analyzer": "lucene.standard"
+          }
+        },
+        "storedSource": {
+          "include": [
+            "id",
+            "description",
+            "line-num",
+            "type",
+            "total",
+            "uom.code",
+            "order-header-num",
+            "order-line-num"
+          ]
+        }
+      }
+    }
+  }
+}
+```
+
+Key index elements:
+- `type: "embeddedDocuments"` — tells Atlas Search to index nested array elements individually
+- `storedSource.include` — which embedded fields to store and return (avoids returning the entire parent document)
+- Parent fields (e.g., `invoice-number`) use `lucene.keyword` for exact matching in `filter`/`hasRoot`
+
+**Example query — fuzzy match on line item description, filtered by invoice number:**
+
+```json
+{
+  "aggregate": [
+    {
+      "$search": {
+        "index": "search_invoice_embedded_line_items",
+        "returnScope": {
+          "path": "invoice-lines"
+        },
+        "returnStoredSource": true,
+        "compound": {
+          "must": [
+            {
+              "text": {
+                "path": "invoice-lines.description",
+                "query": "{item_description}",
+                "fuzzy": {
+                  "maxEdits": 2
+                }
+              }
+            }
+          ],
+          "filter": [
+            {
+              "hasRoot": {
+                "operator": {
+                  "text": {
+                    "path": "invoice-number",
+                    "query": "{invoice_id}"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    { "$limit": 10 },
+    {
+      "$addFields": {
+        "__searchScore": { "$meta": "searchScore" }
+      }
+    },
+    { "$sort": { "__searchScore": -1 } }
+  ]
+}
+```
+
+Key query elements:
+
+| Element | Purpose |
+|---------|---------|
+| `returnScope.path` | Return individual embedded documents from this array field instead of the parent document |
+| `returnStoredSource: true` | Return the stored source fields defined in `storedSource.include` |
+| `text` on `invoice-lines.description` | Fuzzy search within embedded documents (use the dot-path `arrayField.nestedField`) |
+| `hasRoot` | Filter embedded results by a condition on the parent document (e.g., match only line items belonging to a specific invoice) |
+| `filter` clause | `hasRoot` goes inside `filter` so it restricts results without affecting relevance scores |
+
+This pattern is useful for line item matching — finding the best-matching line in a specific PO or invoice by description, while scoping results to a known document number.
+
 ---
 
 ## Practical Rossum Matching Patterns
