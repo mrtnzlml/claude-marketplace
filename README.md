@@ -34,7 +34,11 @@ A reference for the prd2 CLI tool used to manage Rossum configurations across en
 
 An MCP server that wraps the Rossum Data Storage API. Tools: `data_storage_healthz` (connectivity check), `data_storage_set_token` (configure environment and auth), `data_storage_list_collections`, `data_storage_list_indexes`, `data_storage_list_search_indexes`, and `data_storage_aggregate`.
 
-Supports any Rossum environment (e.g. `https://elis.rossum.ai`, `https://customer-dev.rossum.app`). Set `ROSSUM_TOKEN` and optionally `ROSSUM_API_BASE` as environment variables, or provide them interactively via `data_storage_set_token`.
+Supports any Rossum environment (e.g. `https://elis.rossum.ai`, `https://customer-dev.rossum.app`). Authentication is resolved automatically in this order:
+
+1. `ROSSUM_TOKEN` env var (with optional `ROSSUM_API_BASE`)
+2. prd2 project credentials — reads `credentials.yaml` and `prd_config.yaml` from the project directory (auto-connects when a single org is found; prompts to select when multiple orgs exist)
+3. Manual — call `data_storage_set_token` with a token or a prd2 org name
 
 The server starts automatically when the plugin is enabled (requires `python3`).
 
