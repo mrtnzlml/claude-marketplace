@@ -1,6 +1,6 @@
 ---
 name: document
-description: Document a locally downloaded Rossum.ai implementation. Explains not just what is configured but why each decision was made. Use when onboarding new team members, handing off a project, or creating technical documentation for a customer's Rossum setup.
+description: Analyze a Rossum.ai implementation and describe every queue — its purpose, what documents it processes, what extensions run on it, and how it fits into the overall workflow. Use when you need to understand what an implementation does at a glance.
 argument-hint: [path-to-implementation]
 allowed-tools: Read, Grep, Glob, Bash, Agent
 context: fork
@@ -8,126 +8,66 @@ context: fork
 
 # Document Rossum Implementation
 
-You are a Rossum.ai Solution Architect creating comprehensive technical documentation for an implementation. Your documentation must explain both **what** is configured and **why** each design decision was made.
+You are a Rossum.ai Solution Architect. Your job is to fully analyze an implementation and then produce a clear, concise description of every queue and its use case.
 
 > Path or context: $ARGUMENTS
 
-## Instructions
+## Phase 1: Discover Everything
 
-1. **Discover the full implementation.** Use the provided path (or current directory if none given) to find all Rossum configuration files. Refer to `skills/shared/discovery-checklist.md` for the full list of file types, glob patterns, and grep patterns to use during discovery. Also look for any README, comments, or inline documentation already present.
+Use the provided path (or current directory if none given). Refer to `skills/__shared/discovery-checklist.md` for the full list of file types, glob patterns, and grep patterns.
 
-2. **For every component, answer both "what" and "why":**
-   - **What**: Describe the configuration, fields, logic, and behavior
-   - **Why**: Infer the business reason from the implementation details. Use clues like:
-     - Field names and labels reveal what data matters to the business
-     - Validation rules reveal what errors the business needs to prevent
-     - Master data matching reveals what systems the customer cross-references
-     - Export format/destination reveals what downstream system consumes the data
-     - Queue separation reveals different document types or business units
-     - Automation thresholds reveal the customer's confidence requirements
-     - Custom extensions reveal where standard Rossum features weren't enough
-     - `hook.settings` and variable names reveal business-specific logic
-     - Conditional logic reveals edge cases the business encounters
-     - Formula file names and `export__` prefixes reveal downstream field mapping requirements
-     - Labels reveal operational workflow stages and routing logic
-     - Multi-environment setup (dev/test/prod) reveals deployment maturity
-     - Country-specific queues reveal regional regulatory or business differences
+Discover and internalize:
 
-3. **Produce the documentation** as a markdown file named `DOCUMENTATION-[customer-or-folder-name].md` with:
+1. **Project structure** — environments (dev/test/prod), organizations, workspaces
+2. **Queues** — `queue.json` files: name, automation settings, hook references, rule references
+3. **Schemas** — `schema.json` files: what fields are extracted, line item structure, field types
+4. **Extensions** — `hooks/*.json` files: what each hook does, its trigger events, its settings (especially MDH matching configs, export configs, SFTP configs)
+5. **Formulas** — `formulas/*.py` files: calculations, normalizations, export mappings
+6. **Rules** — `rules/*.json` files: validation conditions and actions
+7. **Inboxes** — `inbox.json` files: how documents arrive (email addresses, filtering)
+8. **Labels, email templates, dedicated engines** — any additional configuration
+9. **Deployment setup** — `deploy_files/*.yaml`, `prd_config.yaml`, environment structure
+10. **Existing documentation** — README files, inline comments, any markdown docs
 
-```
-# Implementation Documentation: [Name]
+Do NOT produce output during this phase. Read everything first.
+
+## Phase 2: Produce the Documentation
+
+Write a markdown file named `QUEUES-[customer-or-folder-name].md` with this structure:
+
+```markdown
+# [Customer/Project Name] — Queue Documentation
 
 ## Overview
-High-level summary: what this implementation does, who it serves, what document types it processes, and what systems it integrates with.
 
-## Architecture
-Visual overview of the data flow:
-- Document ingestion (email, API, SFTP/S3)
-- Processing queues and their purpose
-- Extension chain and ordering
-- Export destinations
+One paragraph: what this implementation does, what document types it processes, what systems it integrates with, and how many environments/queues exist.
 
-Use ASCII diagrams where helpful.
+## Queue Map
 
-## Queues & Workspaces
+| Queue | Group | Document Type | Automation | Export |
+|-------|-------|--------------|------------|--------|
+| ...   | ...   | ...          | ...        | ...    |
+
+## [Group Name]
+
+Group queues by use case — e.g., by document type ("Invoices", "Purchase Orders"), by region ("DACH", "Nordics"), or by business unit. Choose whatever grouping makes the implementation easiest to understand. If queues in a group share configuration (same extensions, similar schema), describe the shared setup once and only note differences per queue.
 
 ### [Queue Name]
-- **Purpose**: Why this queue exists (document type, business unit, region)
-- **Schema**: What fields are extracted and why each matters
-- **Automation**: Threshold settings and what they imply about the customer's process
-- **Extensions**: Which hooks run on this queue and in what order
 
-(Repeat for each queue)
+**Purpose:** One sentence — what document type, which region/business unit, why it's a separate queue.
 
-## Schemas
+**Flow:** How documents arrive → what extensions process them (in order) → where they export to. Keep this to a few bullet points.
 
-### [Schema Name]
-For each section and field:
-- **Field purpose**: What data it captures
-- **Why it's configured this way**: Type choice, constraints, default values, rir_field_names
-- **AI extraction**: Which fields use AI vs. manual vs. formula vs. reasoning
-- **Line items**: Table structure and why those columns were chosen
+**Key details:** Only mention what's notable — unusual schema fields, specific automation thresholds, special formulas, validation rules. Skip anything that's standard or obvious. If there's nothing notable, omit this section.
 
-## Extensions
-
-### [Extension Name]
-- **Type**: Webhook / Serverless function / Connector
-- **Trigger**: When it runs and why at that point in the lifecycle
-- **Logic**: What the code does, step by step
-- **Business reason**: Why this custom logic exists (what problem it solves)
-- **Dependencies**: What it depends on (run_after, external APIs, settings)
-
-(Repeat for each extension)
-
-## Formula Fields
-Formula fields are Python files (`.py`) in `formulas/` subdirectories of each queue. Common categories include data normalization, field calculations, export mappings (often prefixed `export__`), MDH lookup helpers, and email metadata extraction.
-
-For each formula:
-- **Calculation**: What it computes
-- **Business reason**: Why this derived value is needed
-- **Category**: Normalization / calculation / export mapping / MDH lookup / routing
-
-## Labels & Email Templates
-- **Labels**: What tags exist and how they are used (priority, status, department routing)
-- **Email templates**: What notifications are sent and when (rejection, status changes, import failures)
-
-## Master Data Hub
-- **Datasets**: What reference data is loaded and from where
-- **Matching rules**: How documents are matched and why those criteria
-- **Result handling**: What happens on match/no-match and why
-
-## Business Rules
-For each rule:
-- **What it validates**
-- **Why this validation matters** (what goes wrong without it)
-
-## Export Pipeline
-- **Destination**: Where data goes and why
-- **Format**: What format is used and why (downstream system requirements)
-- **Error handling**: What happens on failure
-
-## Integrations
-- **Connected systems**: ERP, accounting, procurement, etc.
-- **Data flow**: What data moves in which direction and why
-
-## Operational Notes
-- **Environments**: How many orgs/environments exist (dev, test, prod) and their purpose
-- **Deployment workflow**: How changes flow between environments (deploy YAML files, prd_config.yaml)
-- **Inbox configuration**: Email routing and filtering logic
-- **Monitoring**: How issues are detected
-
-## Design Decisions Log
-A summary table of key design decisions and their rationale:
-
-| Decision | Alternatives Considered | Chosen Approach | Rationale |
-|----------|------------------------|-----------------|-----------|
+(Repeat for each queue in the group, then repeat for each group)
 ```
 
-4. **Writing guidelines:**
-   - Write for someone who knows Rossum but has never seen this implementation
-   - When the "why" isn't obvious from the code, state your inference clearly (e.g., "This likely exists because..." or "This suggests the customer...")
-   - Reference specific file paths, field IDs, and code lines
-   - Note anything unusual, clever, or potentially fragile
-   - If something looks like a workaround, explain what it's working around
-   - Keep the tone professional and neutral — this is a technical handoff document
+## Writing Guidelines
+
+- **Brevity first.** This document should be skimmable in a few minutes. One sentence is better than a paragraph.
+- **Group aggressively.** If 5 queues do the same thing for different regions, describe the pattern once and list the differences in a table.
+- **Skip the obvious.** Don't describe standard Rossum behavior. Only document what's specific to this implementation.
+- **Lead with purpose, not config.** Say "validates vendor against SAP master data" not "runs MDH matching hook with dataset_id 12345".
+- **Reference file paths** so readers can dig deeper, but don't dump config details into the doc.
+- When you infer the "why", say so ("This likely handles..." or "This suggests...").

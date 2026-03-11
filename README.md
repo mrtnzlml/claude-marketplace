@@ -10,11 +10,11 @@ Generates a Statement of Work document from project requirements. Uses Rossum te
 
 ### `/rossum:analyze [path]`
 
-Analyzes a locally downloaded Rossum implementation to find improvements and upsell opportunities. Reviews schemas, extensions, automation settings, master data hub config, export pipelines, and business rules. Produces a structured report with Quick Wins, Improvements, and Upsell Opportunities.
+Analyzes a Rossum implementation for common configuration errors and issues. Discovers the full implementation first, then checks for known problems in schemas, automation, extensions, formulas, rules, and deployment. Produces an issue report with severity levels and fix guidance.
 
 ### `/rossum:document [path]`
 
-Documents a locally downloaded Rossum implementation, explaining both what is configured and why each design decision was made. Produces a structured technical handoff document covering schemas, extensions, queues, master data hub, export pipeline, business rules, and a design decisions log.
+Analyzes a locally downloaded Rossum implementation and produces a queue-focused reference document. Describes every queue's purpose, document type, ingestion method, extension chain, formulas, rules, automation settings, and export destination — giving you a clear picture of what the implementation does at a glance.
 
 ### Rossum Reference (auto-loaded)
 
@@ -74,7 +74,7 @@ rossum-claude-plugin/
     ├── rossum-reference/
     │   ├── SKILL.md
     │   └── reference.md
-    ├── shared/
+    ├── __shared/
     │   └── discovery-checklist.md
     └── write-sow/
         └── SKILL.md
