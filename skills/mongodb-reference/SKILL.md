@@ -15,3 +15,5 @@ Use this knowledge when:
 - Optimizing matching performance or accuracy
 - Understanding MongoDB operators available in Rossum's matching engine
 - Working with `$search`, `$lookup`, `$function`, or other advanced pipeline stages
+
+When writing or debugging queries, if the dataset structure is not already known from context, ask the user for a sample record from the dataset before writing queries. This ensures correct field names and appropriate query behavior for the actual data.
