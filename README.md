@@ -8,11 +8,11 @@ A [Claude Code plugin](https://code.claude.com/docs/en/plugins) for Rossum.ai wo
 
 Generates a Statement of Work document from project requirements. Uses Rossum terminology, future tense ("Rossum will ..."), and defined terms from the legal contract (Cloud Based Technology, Dedicated Engine, Queue, Schema, etc.).
 
-### `/rossum:analyze-implementation [path]`
+### `/rossum:analyze [path]`
 
 Analyzes a locally downloaded Rossum implementation to find improvements and upsell opportunities. Reviews schemas, extensions, automation settings, master data hub config, export pipelines, and business rules. Produces a structured report with Quick Wins, Improvements, and Upsell Opportunities.
 
-### `/rossum:document-implementation [path]`
+### `/rossum:document [path]`
 
 Documents a locally downloaded Rossum implementation, explaining both what is configured and why each design decision was made. Produces a structured technical handoff document covering schemas, extensions, queues, master data hub, export pipeline, business rules, and a design decisions log.
 
@@ -61,9 +61,9 @@ rossum-claude-plugin/
 ├── .claude-plugin/
 │   └── plugin.json
 └── skills/
-    ├── analyze-implementation/
+    ├── analyze/
     │   └── SKILL.md
-    ├── document-implementation/
+    ├── document/
     │   └── SKILL.md
     ├── mongodb-reference/
     │   ├── SKILL.md

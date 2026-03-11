@@ -1,5 +1,5 @@
 ---
-name: document-implementation
+name: document
 description: Document a locally downloaded Rossum.ai implementation. Explains not just what is configured but why each decision was made. Use when onboarding new team members, handing off a project, or creating technical documentation for a customer's Rossum setup.
 argument-hint: [path-to-implementation]
 allowed-tools: Read, Grep, Glob, Bash, Agent

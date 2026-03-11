@@ -1,5 +1,5 @@
 ---
-name: analyze-implementation
+name: analyze
 description: Analyze a locally downloaded Rossum.ai implementation to find improvements, optimization opportunities, and upsell potential. Use when reviewing a customer's Rossum setup, looking for ways to increase automation rates, or identifying underutilized features.
 argument-hint: [path-to-implementation]
 allowed-tools: Read, Grep, Glob, Bash, Agent
