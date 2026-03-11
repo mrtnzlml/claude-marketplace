@@ -28,6 +28,16 @@ A MongoDB query language reference tailored for Rossum.ai Master Data Hub. Cover
 
 A reference for the prd2 CLI tool used to manage Rossum configurations across environments. Covers pull, push, deploy, purge, and hook commands, deploy files, attribute overrides, credentials, and project structure. Auto-loaded when relevant.
 
+## MCP Servers
+
+### `rossum-data-storage`
+
+An MCP server that wraps the Rossum Data Storage API. Tools: `data_storage_healthz` (connectivity check), `data_storage_set_token` (configure environment and auth), `data_storage_list_collections`, `data_storage_list_indexes`, `data_storage_list_search_indexes`, and `data_storage_aggregate`.
+
+Supports any Rossum environment (e.g. `https://elis.rossum.ai`, `https://customer-dev.rossum.app`). Set `ROSSUM_TOKEN` and optionally `ROSSUM_API_BASE` as environment variables, or provide them interactively via `data_storage_set_token`.
+
+The server starts automatically when the plugin is enabled (requires `python3`).
+
 ## Installation
 
 ### Test locally
@@ -60,6 +70,9 @@ Add to `.claude/settings.json`:
 rossum-claude-plugin/
 ├── .claude-plugin/
 │   └── plugin.json
+├── mcp-servers/
+│   └── data-storage/
+│       └── server.py
 └── skills/
     ├── analyze/
     │   └── SKILL.md

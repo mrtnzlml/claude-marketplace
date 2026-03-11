@@ -4,5 +4,15 @@
   "version": "0.1.0",
   "author": {
     "name": "mrtnzlml"
+  },
+  "mcpServers": {
+    "rossum-data-storage": {
+      "command": "python3",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/mcp-servers/data-storage/server.py"],
+      "env": {
+        "ROSSUM_API_BASE": "${ROSSUM_API_BASE:-https://elis.rossum.ai}",
+        "ROSSUM_TOKEN": "${ROSSUM_TOKEN:-}"
+      }
+    }
   }
 }

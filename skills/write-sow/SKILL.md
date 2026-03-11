@@ -19,9 +19,11 @@ You are a Rossum.ai Solution Architect writing a Statement of Work. Generate a S
    - **Master data**: Does the customer need vendor matching, PO matching, or other data validation? What fields should be used for matching (VAT ID, IBAN, name, PO number)? What datasets will be provided and in what format?
    - **Out of scope**: What is explicitly excluded?
 
+   If the customer's Data Storage environment is accessible (via the `rossum-data-storage` MCP tools), use `data_storage_list_collections` to discover existing datasets and `data_storage_aggregate` to sample their structure (e.g. `[{"$sample": {"size": 1}}]`). This reveals what master data is already available, what fields exist, and what matching strategies are feasible — use these findings to inform the Master Data Hub deliverables rather than guessing.
+
 2. **Generate the SOW** using the exact structure from [template.md](template.md). Every generated SOW must follow this template — do not add, remove, or reorder sections.
 
-3. **Verify deliverability.** Before writing the final SOW, cross-check every deliverable against the Rossum platform reference (`skills/rossum-reference/reference.md`) and MongoDB reference (`skills/mongodb-reference/reference.md`). Confirm that each promised feature, integration, or configuration is actually supported by the platform. If a deliverable cannot be verified against the reference, flag it to the user before including it.
+3. **Verify deliverability.** Before writing the final SOW, cross-check every deliverable against the Rossum platform reference (`skills/rossum-reference/reference.md`) and MongoDB reference (`skills/mongodb-reference/reference.md`). Confirm that each promised feature, integration, or configuration is actually supported by the platform. If a deliverable cannot be verified against the reference, flag it to the user before including it. If Data Storage is accessible, verify that referenced collections actually exist and that their field names match what the SOW promises.
 
 4. **Write the SOW** as a new markdown file named `SOW-[project-name].md` in the current working directory.
 

@@ -1,6 +1,6 @@
 ---
 name: document
-description: Analyze a Rossum.ai implementation and describe every queue — its purpose, what documents it processes, what extensions run on it, and how it fits into the overall workflow. Use when you need to understand what an implementation does at a glance.
+description: Document a Rossum.ai implementation — produce a structured reference describing every queue, its purpose, document types, extensions, and how it fits into the overall workflow. Use this skill whenever the user wants to understand, describe, summarize, or write up what an implementation does. Triggers include requests like "document this project", "what does this implementation do", "write up the queues", "summarize this setup", "create a reference doc", or any request to explain or map out a Rossum customer configuration.
 argument-hint: [path-to-implementation]
 allowed-tools: Read, Grep, Glob, Bash, Agent
 context: fork
@@ -28,6 +28,7 @@ Discover and internalize:
 8. **Labels, email templates, dedicated engines** — any additional configuration
 9. **Deployment setup** — `deploy_files/*.yaml`, `prd_config.yaml`, environment structure
 10. **Existing documentation** — README files, inline comments, any markdown docs
+11. **Data Storage** — if the `rossum-data-storage` MCP tools are available, use `data_storage_list_collections` to discover datasets and `data_storage_list_indexes` / `data_storage_list_search_indexes` to understand indexing. This adds context about what master data backs the matching hooks found in step 4.
 
 Do NOT produce output during this phase. Read everything first.
 

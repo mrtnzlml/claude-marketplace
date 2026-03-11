@@ -44,6 +44,7 @@ With the full picture from Phase 1, check for these issues:
 - **Contradictory rules** — rules where one requires what another forbids
 - **Environment drift** — configuration differences between dev/test/prod environments that look unintentional (not just ID differences)
 - **Plain-text secrets** — credentials, API keys, or secrets committed in plain text
+- **Data Storage mismatches** — if the `rossum-data-storage` MCP tools are available, use `data_storage_list_collections` to verify that collection names referenced in MDH matching hook configs actually exist, and `data_storage_list_indexes` to check that required indexes are in place
 
 Only report issues you actually find. Do not report speculative or generic concerns. Ground every finding in specific files and line numbers.
 

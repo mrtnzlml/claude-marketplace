@@ -16,4 +16,4 @@ Use this knowledge when:
 - Understanding MongoDB operators available in Rossum's matching engine
 - Working with `$search`, `$lookup`, `$function`, or other advanced pipeline stages
 
-When writing or debugging queries, if the dataset structure is not already known from context, ask the user for a sample record from the dataset before writing queries. This ensures correct field names and appropriate query behavior for the actual data.
+When writing or debugging queries, if the dataset structure is not already known from context, try to discover it using the `rossum-data-storage` MCP tools: `data_storage_list_collections` to find available collections and `data_storage_aggregate` with `[{"$sample": {"size": 1}}]` to retrieve a sample record. Fall back to asking the user only if the MCP tools are not available. This ensures correct field names and appropriate query behavior for the actual data.
