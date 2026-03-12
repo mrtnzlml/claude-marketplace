@@ -28,7 +28,7 @@ Discover and internalize:
 8. **Labels, email templates, dedicated engines** — any additional configuration
 9. **Deployment setup** — `deploy_files/*.yaml`, `prd_config.yaml`, environment structure
 10. **Existing documentation** — README files, inline comments, any markdown docs
-11. **Data Storage** — if the `rossum-data-storage` MCP tools are available, use `data_storage_list_collections` to discover datasets and `data_storage_list_indexes` / `data_storage_list_search_indexes` to understand indexing. This adds context about what master data backs the matching hooks found in step 4.
+11. **Data Storage** — if the `rossum-api` MCP tools are available, use `data_storage_list_collections` to discover datasets and `data_storage_list_indexes` / `data_storage_list_search_indexes` to understand indexing. This adds context about what master data backs the matching hooks found in step 4.
 
 Do NOT produce output during this phase. Read everything first.
 

@@ -30,17 +30,32 @@ A reference for the prd2 CLI tool used to manage Rossum configurations across en
 
 ## MCP Servers
 
-### `rossum-data-storage`
+### `rossum-api`
 
-An MCP server that wraps the Rossum Data Storage API. Tools: `data_storage_healthz` (connectivity check), `data_storage_set_token` (configure environment and auth), `data_storage_list_collections`, `data_storage_list_indexes`, `data_storage_list_search_indexes`, and `data_storage_aggregate`.
+A read-only MCP server for Rossum APIs. Starts automatically when the plugin is enabled (requires `python3`). Supports any Rossum environment (elis.rossum.ai, *.rossum.app, etc.).
 
-Supports any Rossum environment (e.g. `https://elis.rossum.ai`, `https://customer-dev.rossum.app`). Authentication is resolved automatically in this order:
+**Authentication** — resolved automatically in this order:
 
-1. `ROSSUM_TOKEN` env var (with optional `ROSSUM_API_BASE`)
-2. prd2 project credentials — reads `credentials.yaml` and `prd_config.yaml` from the project directory (auto-connects when a single org is found; prompts to select when multiple orgs exist)
-3. Manual — call `data_storage_set_token` with a token or a prd2 org name
+1. `ROSSUM_TOKEN` environment variable
+2. prd2 project credentials (`credentials.yaml` + `prd_config.yaml`)
+3. Manual — Claude will ask for a token and call `rossum_set_token`
 
-The server starts automatically when the plugin is enabled (requires `python3`).
+#### Data Storage
+
+| Tool | Description |
+|------|-------------|
+| `data_storage_healthz` | Check if the Data Storage API is reachable (no auth required). |
+| `data_storage_list_collections` | List available collections. Optional `filter` and `nameOnly` (default: true). |
+| `data_storage_list_indexes` | List MongoDB indexes on a collection. |
+| `data_storage_list_search_indexes` | List Atlas Search indexes on a collection. |
+| `data_storage_aggregate` | Run a MongoDB aggregation pipeline. Supports `collectionName`, `pipeline`, `collation`, `let`, `options`. Runtime limited to 120 s. |
+
+#### Rossum API
+
+| Tool | Description |
+|------|-------------|
+| `rossum_set_token` | Set or switch the API connection. Accepts a `token` directly, or a prd2 `org` name to load credentials from the project. |
+| `rossum_list_users` | List all users in the organization. Auto-paginates. Optional `is_active` filter. |
 
 ## Installation
 
@@ -75,7 +90,7 @@ rossum-claude-plugin/
 ├── .claude-plugin/
 │   └── plugin.json
 ├── mcp-servers/
-│   └── data-storage/
+│   └── rossum-api/
 │       └── server.py
 └── skills/
     ├── analyze/

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""MCP server for Rossum Data Storage API."""
+"""MCP server for Rossum APIs (read-only)."""
 
 import json
 import os
@@ -248,8 +248,8 @@ def ensure_token(request_id):
         tool_result(
             request_id,
             f"Found multiple prd2 organizations: {orgs}. "
-            "Call data_storage_set_token with the 'org' parameter to select one "
-            "(e.g. data_storage_set_token(org='sandbox-org')).",
+            "Call rossum_set_token with the 'org' parameter to select one "
+            "(e.g. rossum_set_token(org='sandbox-org')).",
             is_error=True,
         )
         return None
@@ -259,7 +259,7 @@ def ensure_token(request_id):
     tool_result(
         request_id,
         "No API token found. Checked: ROSSUM_TOKEN env var, prd2 credentials.yaml files. "
-        "Ask the user for their Rossum API token and call data_storage_set_token, "
+        "Ask the user for their Rossum API token and call rossum_set_token, "
         "or run from a prd2 project directory.",
         is_error=True,
     )
@@ -270,8 +270,8 @@ def ensure_token(request_id):
 
 TOOLS = {}
 
-TOOLS["data_storage_set_token"] = {
-    "name": "data_storage_set_token",
+TOOLS["rossum_set_token"] = {
+    "name": "rossum_set_token",
     "description": (
         "Sets the Rossum API connection for this session. Either provide a token directly, "
         "or specify a prd2 organization name to read credentials from the project's "
@@ -394,39 +394,64 @@ TOOLS["data_storage_list_search_indexes"] = {
     "inputSchema": _INDEX_LIST_SCHEMA,
 }
 
+TOOLS["rossum_list_users"] = {
+    "name": "rossum_list_users",
+    "description": "Lists all users in the Rossum organization. Auto-paginates to return every user.",
+    "inputSchema": {
+        "type": "object",
+        "properties": {
+            "is_active": {
+                "type": "boolean",
+                "description": "Filter by active status. Omit to return all users.",
+            },
+        },
+    },
+}
+
 
 # --- Handlers ---
 
 
-def api_call(request_id, path, body):
+def _http_request(request_id, url, *, method="GET", body=None):
+    """Make an authenticated HTTP request. Returns parsed JSON or None (error sent)."""
     token = ensure_token(request_id)
     if not token:
-        return
+        return None
 
-    req = urllib.request.Request(
-        f"{_get_base_url()}/svc/data-storage/api{path}",
-        data=json.dumps(body).encode("utf-8"),
-        headers={"Content-Type": "application/json", "Authorization": f"Bearer {token}"},
-        method="POST",
-    )
+    headers = {"Authorization": f"Bearer {token}"}
+    data = None
+    if body is not None:
+        headers["Content-Type"] = "application/json"
+        data = json.dumps(body).encode("utf-8")
+
+    req = urllib.request.Request(url, data=data, headers=headers, method=method)
 
     try:
         with urllib.request.urlopen(req, timeout=130) as resp:
-            result = json.loads(resp.read().decode("utf-8"))
-            return tool_result(request_id, json.dumps(result, indent=2))
+            return json.loads(resp.read().decode("utf-8"))
     except urllib.error.HTTPError as e:
         error_body = e.read().decode("utf-8") if e.fp else str(e)
         if e.code == 401:
             _invalidate_token()
-            return tool_result(
+            tool_result(
                 request_id,
                 f"Authentication failed (HTTP 401). Token may be expired. "
-                f"Ask the user for a new token, then call data_storage_set_token.\n{error_body}",
+                f"Ask the user for a new token, then call rossum_set_token.\n{error_body}",
                 is_error=True,
             )
-        return tool_result(request_id, f"HTTP {e.code}: {error_body}", is_error=True)
+            return None
+        tool_result(request_id, f"HTTP {e.code}: {error_body}", is_error=True)
+        return None
     except Exception as e:
-        return tool_result(request_id, f"Error: {e}", is_error=True)
+        tool_result(request_id, f"Error: {e}", is_error=True)
+        return None
+
+
+def api_call(request_id, path, body):
+    url = f"{_get_base_url()}/svc/data-storage/api{path}"
+    result = _http_request(request_id, url, method="POST", body=body)
+    if result is not None:
+        tool_result(request_id, json.dumps(result, indent=2))
 
 
 def handle_healthz(request_id, arguments):
@@ -532,13 +557,40 @@ def handle_list_search_indexes(request_id, arguments):
     return _handle_index_list(request_id, arguments, "/v1/search_indexes/list")
 
 
+def handle_list_users(request_id, arguments):
+    base_url = _get_base_url()
+    params = ["page_size=100"]
+    if "is_active" in arguments:
+        params.append(f"is_active={'true' if arguments['is_active'] else 'false'}")
+
+    url = f"{base_url}/api/v1/users?{'&'.join(params)}"
+    all_results = []
+
+    while url:
+        page = _http_request(request_id, url)
+        if page is None:
+            return
+        all_results.extend(page.get("results", []))
+        next_url = page.get("pagination", {}).get("next")
+        # Follow relative or absolute next URLs; stop if missing
+        if not next_url:
+            break
+        # The API returns absolute URLs — validate to prevent SSRF via pagination
+        if _validate_base_url(next_url) != _validate_base_url(url):
+            break
+        url = next_url
+
+    tool_result(request_id, json.dumps({"total": len(all_results), "results": all_results}, indent=2))
+
+
 HANDLERS = {
     "data_storage_healthz": handle_healthz,
-    "data_storage_set_token": handle_set_token,
+    "rossum_set_token": handle_set_token,
     "data_storage_list_collections": handle_list_collections,
     "data_storage_aggregate": handle_aggregate,
     "data_storage_list_indexes": handle_list_indexes,
     "data_storage_list_search_indexes": handle_list_search_indexes,
+    "rossum_list_users": handle_list_users,
 }
 
 
@@ -559,7 +611,7 @@ def main():
                 respond(request_id, {
                     "protocolVersion": "2024-11-05",
                     "capabilities": {"tools": {}},
-                    "serverInfo": {"name": "rossum-data-storage", "version": "0.1.0"},
+                    "serverInfo": {"name": "rossum-api", "version": "0.1.0"},
                 })
             elif method == "notifications/initialized":
                 pass

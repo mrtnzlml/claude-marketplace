@@ -6,9 +6,9 @@
     "name": "mrtnzlml"
   },
   "mcpServers": {
-    "rossum-data-storage": {
+    "rossum-api": {
       "command": "python3",
-      "args": ["${CLAUDE_PLUGIN_ROOT}/mcp-servers/data-storage/server.py"],
+      "args": ["${CLAUDE_PLUGIN_ROOT}/mcp-servers/rossum-api/server.py"],
       "env": {
         "ROSSUM_API_BASE": "${ROSSUM_API_BASE:-https://elis.rossum.ai}",
         "ROSSUM_TOKEN": "${ROSSUM_TOKEN:-}"

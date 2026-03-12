@@ -44,7 +44,7 @@ With the full picture from Phase 1, check for these issues:
 - **Contradictory rules** — rules where one requires what another forbids
 - **Environment drift** — configuration differences between dev/test/prod environments that look unintentional (not just ID differences)
 - **Plain-text secrets** — credentials, API keys, or secrets committed in plain text
-- **Data Storage mismatches** — if the `rossum-data-storage` MCP tools are available, verify MDH matching hook configs against live Data Storage:
+- **Data Storage mismatches** — if the `rossum-api` MCP tools are available, verify MDH matching hook configs against live Data Storage:
   - Use `data_storage_list_collections` to check that every collection name referenced in matching configs actually exists
   - For each referenced collection, use `data_storage_list_indexes` and `data_storage_list_search_indexes` to retrieve its indexes
   - Cross-reference the matching query fields (from hook settings) against the available indexes. Flag fields used in `$match`, `$sort`, or `$search` stages that have no supporting index — these cause full collection scans and degrade matching performance
