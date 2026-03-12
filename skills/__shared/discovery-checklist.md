@@ -2,6 +2,21 @@
 
 Use this checklist to systematically discover all components of a Rossum implementation. Implementations typically follow a multi-environment directory structure.
 
+## Discovery Process
+
+Use the provided path (or current directory if none given). Discover and internalize all components before producing any output.
+
+1. **Project structure** — environments (dev/test/prod), organizations, workspaces
+2. **Queues** — `queue.json` files: name, automation settings, hook references, rule references
+3. **Schemas** — `schema.json` files: what fields are extracted, line item structure, field types
+4. **Extensions** — `hooks/*.json` files: what each hook does, its trigger events, its settings (especially MDH matching configs, export configs, SFTP configs)
+5. **Formulas** — `formulas/*.py` files: calculations, normalizations, export mappings
+6. **Rules** — `rules/*.json` files: validation conditions and actions
+7. **Inboxes** — `inbox.json` files: how documents arrive (email addresses, filtering)
+8. **Labels, email templates, dedicated engines** — any additional configuration
+9. **Deployment setup** — `deploy_files/*.yaml`, `prd_config.yaml`, environment structure
+10. **Existing documentation** — README files, inline comments, any markdown docs
+
 ## Project Layout
 
 Typical top-level structure:

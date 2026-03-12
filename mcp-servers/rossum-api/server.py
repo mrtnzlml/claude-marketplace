@@ -212,6 +212,7 @@ def _tool(name, description, schema):
                 ),
             },
         },
+        "additionalProperties": False,
     },
 )
 def handle_set_token(request_id, arguments):
@@ -243,19 +244,37 @@ def handle_set_token(request_id, arguments):
 
 @_tool(
     "data_storage_healthz",
-    "Checks if the Rossum Data Storage API is reachable. Does not require authentication.",
-    {"type": "object", "properties": {}},
+    "Checks if the Rossum Data Storage API is reachable. Does not require authentication. "
+    "Uses the connected environment if available, otherwise checks the default (elis.rossum.ai).",
+    {
+        "type": "object",
+        "properties": {
+            "baseUrl": {
+                "type": "string",
+                "description": "Base URL to check. Defaults to the connected environment or elis.rossum.ai.",
+            },
+        },
+        "additionalProperties": False,
+    },
 )
 def handle_healthz(request_id, arguments):
-    base_url = _cached_base_url or "https://elis.rossum.ai"
-    validated = _validate_base_url(base_url)
-    if not validated:
-        return tool_result(request_id, f"Invalid base URL: {base_url}. Must be an HTTPS URL.", is_error=True)
+    raw_url = arguments.get("baseUrl", "")
+    if raw_url:
+        validated = _validate_base_url(raw_url)
+        if not validated:
+            return tool_result(request_id, f"Invalid base URL: {raw_url}. Must be an HTTPS URL.", is_error=True)
+        source = "provided"
+    elif _cached_base_url:
+        validated = _cached_base_url
+        source = "connected environment"
+    else:
+        validated = "https://elis.rossum.ai"
+        source = "default (no connection established)"
 
     if _check_health(validated):
-        return tool_result(request_id, f"Data Storage API at {validated} is healthy.")
+        return tool_result(request_id, f"Data Storage API at {validated} is healthy ({source}).")
 
-    return tool_result(request_id, f"Data Storage API at {validated} is not reachable.", is_error=True)
+    return tool_result(request_id, f"Data Storage API at {validated} is not reachable ({source}).", is_error=True)
 
 
 @_tool(
@@ -267,6 +286,7 @@ def handle_healthz(request_id, arguments):
             "filter": {"type": "object", "description": "Optional query filter for collections."},
             "nameOnly": {"type": "boolean", "description": "Return only collection names (default: true)."},
         },
+        "additionalProperties": False,
     },
 )
 def handle_list_collections(request_id, arguments):
@@ -281,10 +301,10 @@ def handle_list_collections(request_id, arguments):
 @_tool(
     "data_storage_aggregate",
     "Performs a MongoDB aggregation pipeline on a Rossum Data Storage collection. "
-    "Runtime is limited to 120 seconds.",
+    "Runtime is limited to 120 seconds. Always include a $limit stage to avoid unbounded results.",
     {
         "type": "object",
-        "required": ["pipeline"],
+        "required": ["collectionName", "pipeline"],
         "properties": {
             "collectionName": {"type": "string", "description": "The name of the collection to aggregate on."},
             "pipeline": {
@@ -296,11 +316,12 @@ def handle_list_collections(request_id, arguments):
             "let": {"type": "object", "description": "Variables accessible in the pipeline."},
             "options": {"type": "object", "description": "Additional aggregation options."},
         },
+        "additionalProperties": False,
     },
 )
 def handle_aggregate(request_id, arguments):
-    body = {"pipeline": arguments.get("pipeline", [])}
-    for key in ("collectionName", "collation", "let", "options"):
+    body = {"pipeline": arguments.get("pipeline", []), "collectionName": arguments["collectionName"]}
+    for key in ("collation", "let", "options"):
         if key in arguments:
             body[key] = arguments[key]
     return _data_storage_call(request_id, "/v1/data/aggregate", body)
@@ -313,6 +334,7 @@ _INDEX_LIST_SCHEMA = {
         "collectionName": {"type": "string", "description": "The name of the collection."},
         "nameOnly": {"type": "boolean", "description": "Return only index names (default: true)."},
     },
+    "additionalProperties": False,
 }
 
 
@@ -348,6 +370,7 @@ _USER_FIELDS = ("id", "email", "first_name", "last_name", "is_active")
         "properties": {
             "is_active": {"type": "boolean", "description": "Filter by active status. Omit to return all users."},
         },
+        "additionalProperties": False,
     },
 )
 def handle_list_users(request_id, arguments):
@@ -404,6 +427,7 @@ def handle_list_users(request_id, arguments):
                 "description": "Maximum entries to return (default: 100, max: 1000).",
             },
         },
+        "additionalProperties": False,
     },
 )
 def handle_list_audit_logs(request_id, arguments):

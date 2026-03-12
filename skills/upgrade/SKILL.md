@@ -1,6 +1,6 @@
 ---
 name: upgrade
-description: Upgrade deprecated Rossum extensions to modern equivalents. Finds old Copy & Paste, Find & Replace, and Value Mapping extensions and produces replacement formula fields with migration steps. Use when modernizing a customer implementation.
+description: Upgrade deprecated Rossum extensions to modern equivalents. Finds old Copy & Paste, Find & Replace, and Value Mapping extensions and produces replacement formula fields with migration steps. Use when modernizing a customer implementation. Triggers on requests like "upgrade extensions", "migrate to formulas", "replace deprecated hooks", "modernize this setup".
 argument-hint: [path-to-implementation]
 allowed-tools: Read, Grep, Glob, Bash, Agent
 context: fork
