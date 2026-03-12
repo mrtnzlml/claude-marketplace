@@ -379,32 +379,25 @@ def handle_list_users(request_id, arguments):
 
 @_tool(
     "rossum_list_audit_logs",
-    "List audit log entries. Supports filtering by date range, user, action type, and object type. "
-    "Returns up to max_results entries (default 100).",
+    "List audit log entries. Requires admin or organization group admin role. "
+    "Logs are retained for 1 year. Returns up to max_results entries (default 100).",
     {
         "type": "object",
         "required": ["object_type"],
         "properties": {
             "object_type": {
                 "type": "string",
-                "description": "Object type to query (e.g. 'annotation', 'queue', 'hook', 'schema', 'workspace', 'user', 'organization').",
+                "description": "Object type to query: 'document', 'annotation', or 'user'.",
             },
-            "timestamp_after": {
-                "type": "string",
-                "description": "ISO 8601 datetime. Only logs after this time (e.g. '2025-01-01T00:00:00Z').",
-            },
-            "timestamp_before": {
-                "type": "string",
-                "description": "ISO 8601 datetime. Only logs before this time.",
-            },
-            "user": {"type": "integer", "description": "Filter by user ID."},
             "action": {
                 "type": "string",
-                "description": "Filter by action (e.g. 'create', 'update', 'delete', 'export').",
-            },
-            "ordering": {
-                "type": "string",
-                "description": "Sort order. Default: '-id' (newest first). Use 'id' for oldest first.",
+                "description": (
+                    "Filter by action. Allowed values depend on object_type: "
+                    "document: 'create'. "
+                    "annotation: 'update-status'. "
+                    "user: 'create', 'delete', 'purge', 'update', 'destroy', "
+                    "'app_load', 'reset-password', 'change-password'."
+                ),
             },
             "max_results": {
                 "type": "integer",
@@ -420,10 +413,9 @@ def handle_list_audit_logs(request_id, arguments):
 
     max_results = min(arguments.get("max_results", 100), 1000)
     page_size = min(max_results, 100)
-    params = [("page_size", page_size)]
-    for key in ("timestamp_after", "timestamp_before", "user", "action", "object_type", "ordering"):
-        if key in arguments:
-            params.append((key, arguments[key]))
+    params = [("page_size", page_size), ("object_type", arguments["object_type"])]
+    if "action" in arguments:
+        params.append(("action", arguments["action"]))
 
     url = f"{base_url}/api/v1/audit_logs?{urlencode(params)}"
     all_results = []

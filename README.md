@@ -52,7 +52,7 @@ A read-only MCP server for Rossum APIs. Starts automatically when the plugin is 
 |------|-------------|
 | `rossum_set_token` | Set the API connection. Requires `token` and `baseUrl`. |
 | `rossum_list_users` | List all users in the organization. Auto-paginates. Optional `is_active` filter. |
-| `rossum_list_audit_logs` | List audit log entries. Filter by date range, user, action type, object type. Auto-paginates up to `max_results` (default 100, max 1000). |
+| `rossum_list_audit_logs` | List audit log entries. Requires `object_type` (`document`, `annotation`, `user`), optional `action` filter. Admin-only, 1-year retention. Auto-paginates up to `max_results` (default 100, max 1000). |
 
 ## Installation
 
