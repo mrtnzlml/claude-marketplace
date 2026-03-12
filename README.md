@@ -83,36 +83,3 @@ Add to `.claude/settings.json`:
   "enabledPlugins": ["rossum@<marketplace-name>"]
 }
 ```
-
-## Development
-
-```
-rossum-claude-plugin/
-├── .claude-plugin/
-│   └── plugin.json
-├── mcp-servers/
-│   └── rossum-api/
-│       └── server.py
-└── skills/
-    ├── analyze/
-    │   └── SKILL.md
-    ├── document/
-    │   └── SKILL.md
-    ├── mongodb-reference/
-    │   ├── SKILL.md
-    │   └── reference.md
-    ├── prd-reference/
-    │   ├── SKILL.md
-    │   └── reference.md
-    ├── rossum-reference/
-    │   ├── SKILL.md
-    │   └── reference.md
-    ├── upgrade/
-    │   └── SKILL.md
-    ├── __shared/
-    │   └── discovery-checklist.md
-    └── write-sow/
-        └── SKILL.md
-```
-
-To test changes, restart Claude Code with `--plugin-dir`.
