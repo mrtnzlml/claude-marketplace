@@ -16,6 +16,10 @@ Analyzes a Rossum implementation for common configuration errors and issues. Dis
 
 Analyzes a locally downloaded Rossum implementation and produces a queue-focused reference document. Describes every queue's purpose, document type, ingestion method, extension chain, formulas, rules, automation settings, and export destination — giving you a clear picture of what the implementation does at a glance.
 
+### `/rossum:upgrade [path]`
+
+Upgrades deprecated Rossum extensions to modern equivalents. Currently covers value transformations: finds old Copy & Paste, Find & Replace, and Value Mapping extensions and produces replacement formula fields with migration steps.
+
 ### Rossum Reference (auto-loaded)
 
 A comprehensive Rossum.ai platform reference (API, TxScript, Aurora AI, Master Data Hub, extensions, etc.) that Claude loads automatically when relevant. Not invocable as a slash command.
@@ -103,6 +107,8 @@ rossum-claude-plugin/
     ├── rossum-reference/
     │   ├── SKILL.md
     │   └── reference.md
+    ├── upgrade/
+    │   └── SKILL.md
     ├── __shared/
     │   └── discovery-checklist.md
     └── write-sow/
