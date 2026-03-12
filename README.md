@@ -34,11 +34,11 @@ A reference for the prd2 CLI tool used to manage Rossum configurations across en
 
 A read-only MCP server for Rossum APIs. Starts automatically when the plugin is enabled (requires `python3`). Supports any Rossum environment (elis.rossum.ai, *.rossum.app, etc.).
 
-**Authentication** — resolved automatically in this order:
+**Connection** — both the API base URL and token are resolved automatically:
 
-1. `ROSSUM_TOKEN` environment variable
-2. prd2 project credentials (`credentials.yaml` + `prd_config.yaml`)
-3. Manual — Claude will ask for a token and call `rossum_set_token`
+1. Environment variables: `ROSSUM_TOKEN` + `ROSSUM_API_BASE`
+2. prd2 project credentials (`credentials.yaml` + `prd_config.yaml`) — prefers sandbox/dev orgs over production
+3. Manual — Claude will ask and call `rossum_set_token`
 
 #### Data Storage
 

@@ -164,11 +164,52 @@ def _discover_prd2_credentials():
     return results
 
 
+def _persist_token_to_prd2(base_url, token):
+    """Write token to the prd2 org whose api_base matches base_url.
+
+    Silently does nothing if there is no prd2 project or no matching org.
+    """
+    project_root = _find_prd2_root()
+    if not project_root:
+        return
+
+    config = _parse_prd_config(os.path.join(project_root, "prd_config.yaml"))
+    for org_name, api_base in config.items():
+        if _validate_base_url(api_base) != base_url:
+            continue
+
+        creds_path = os.path.join(project_root, org_name, "credentials.yaml")
+
+        # Update existing token line or append
+        lines = []
+        found = False
+        try:
+            with open(creds_path) as f:
+                lines = f.readlines()
+        except OSError:
+            pass
+
+        new_lines = []
+        for line in lines:
+            if line.strip().startswith("token:"):
+                new_lines.append(f"token: {token}\n")
+                found = True
+            else:
+                new_lines.append(line)
+
+        if not found:
+            new_lines.append(f"token: {token}\n")
+
+        try:
+            with open(creds_path, "w") as f:
+                f.writelines(new_lines)
+            _log(f"Token saved to {creds_path}")
+        except OSError as e:
+            _log(f"Failed to write token to {creds_path}: {e}")
+        return
+
+
 # --- Connection state ---
-
-
-def _get_base_url():
-    return _cached_base_url or os.environ.get("ROSSUM_API_BASE", "https://elis.rossum.ai")
 
 
 def _check_health(base_url):
@@ -199,71 +240,73 @@ def _probe_token(base_url, token):
         return False
 
 
-def _invalidate_token():
-    """Clear token state. Preserves base URL so only a new token is needed."""
-    global _cached_token, _token_validated
+def _invalidate_connection():
+    """Clear cached connection state."""
+    global _cached_base_url, _cached_token, _token_validated
+    _cached_base_url = None
     _cached_token = None
     _token_validated = False
 
 
-def _try_validate(request_id, base_url, token):
-    """Validate a base_url + token pair. On success, cache and return the token."""
+def _sort_prd2_preference(creds):
+    """Sort prd2 credentials: sandbox/dev/test first, production last."""
+    def _rank(entry):
+        name = entry[0].lower()
+        if any(kw in name for kw in ("sandbox", "dev", "test", "staging")):
+            return 0
+        if any(kw in name for kw in ("prod", "production")):
+            return 2
+        return 1
+    return sorted(creds, key=_rank)
+
+
+def _ensure_connection(request_id):
+    """Resolve base_url + token together. Returns (base_url, token) or (None, None) with error sent.
+
+    Resolution order:
+    1. Cached (already validated)
+    2. Environment variables: ROSSUM_TOKEN + ROSSUM_API_BASE
+    3. prd2 project credentials (prefers sandbox/dev over production)
+    4. Error — asks user to call rossum_set_token
+    """
     global _cached_base_url, _cached_token, _token_validated
 
-    validated = _validate_base_url(base_url)
-    if not validated:
-        return None
+    if _token_validated and _cached_base_url and _cached_token:
+        return (_cached_base_url, _cached_token)
 
-    if _probe_token(validated, token):
-        _cached_base_url = validated
-        _cached_token = token
-        _token_validated = True
-        return token
+    # 1. Environment variables (both from the same source)
+    env_token = os.environ.get("ROSSUM_TOKEN", "") or None
+    if env_token:
+        env_base = os.environ.get("ROSSUM_API_BASE", "") or None
+        base_url = _validate_base_url(env_base) if env_base else "https://elis.rossum.ai"
+        if base_url and _probe_token(base_url, env_token):
+            _cached_base_url = base_url
+            _cached_token = env_token
+            _token_validated = True
+            return (base_url, env_token)
 
-    return None
-
-
-def ensure_token(request_id):
-    """Return a validated token or send an error and return None."""
-    if _token_validated and _cached_token:
-        return _cached_token
-
-    # 1. Try env var
-    token = os.environ.get("ROSSUM_TOKEN", "") or None
-    if token:
-        base_url = _get_base_url()
-        if _try_validate(request_id, base_url, token):
-            return _cached_token
-
-    # 2. Try prd2 credentials
+    # 2. prd2 project credentials (prefer sandbox/dev over production)
     prd2_creds = _discover_prd2_credentials()
-    if len(prd2_creds) == 1:
-        org_name, base_url, token = prd2_creds[0]
-        if _try_validate(request_id, base_url, token):
-            _log(f"Auto-connected using prd2 credentials from org '{org_name}'")
-            return _cached_token
+    if prd2_creds:
+        for org_name, base_url, token in _sort_prd2_preference(prd2_creds):
+            if _probe_token(base_url, token):
+                _cached_base_url = base_url
+                _cached_token = token
+                _token_validated = True
+                _log(f"Auto-connected to '{org_name}' ({base_url})")
+                return (base_url, token)
 
-    if len(prd2_creds) > 1:
-        orgs = ", ".join(f"'{name}' ({url})" for name, url, _ in prd2_creds)
-        tool_result(
-            request_id,
-            f"Found multiple prd2 organizations: {orgs}. "
-            "Call rossum_set_token with the 'org' parameter to select one "
-            "(e.g. rossum_set_token(org='sandbox-org')).",
-            is_error=True,
-        )
-        return None
-
-    # 3. No token found
-    _invalidate_token()
+    # 3. No valid credentials
+    _invalidate_connection()
     tool_result(
         request_id,
-        "No API token found. Checked: ROSSUM_TOKEN env var, prd2 credentials.yaml files. "
+        "No valid API credentials found. "
+        "Checked: ROSSUM_TOKEN + ROSSUM_API_BASE env vars, prd2 project credentials. "
         "Ask the user for their Rossum API token and call rossum_set_token, "
         "or run from a prd2 project directory.",
         is_error=True,
     )
-    return None
+    return (None, None)
 
 
 # --- Tools ---
@@ -413,10 +456,16 @@ TOOLS["rossum_list_users"] = {
 
 
 def _http_request(request_id, url, *, method="GET", body=None):
-    """Make an authenticated HTTP request. Returns parsed JSON or None (error sent)."""
-    token = ensure_token(request_id)
-    if not token:
-        return None
+    """Make an authenticated HTTP request. Returns parsed JSON or None (error sent).
+
+    Connection must be ensured before calling (for correct URL construction).
+    Uses the cached token for authentication.
+    """
+    if not (_token_validated and _cached_token):
+        _, token = _ensure_connection(request_id)
+        if not token:
+            return None
+    token = _cached_token
 
     headers = {"Authorization": f"Bearer {token}"}
     data = None
@@ -432,7 +481,7 @@ def _http_request(request_id, url, *, method="GET", body=None):
     except urllib.error.HTTPError as e:
         error_body = e.read().decode("utf-8") if e.fp else str(e)
         if e.code == 401:
-            _invalidate_token()
+            _invalidate_connection()
             tool_result(
                 request_id,
                 f"Authentication failed (HTTP 401). Token may be expired. "
@@ -448,14 +497,17 @@ def _http_request(request_id, url, *, method="GET", body=None):
 
 
 def api_call(request_id, path, body):
-    url = f"{_get_base_url()}/svc/data-storage/api{path}"
+    base_url, _ = _ensure_connection(request_id)
+    if not base_url:
+        return
+    url = f"{base_url}/svc/data-storage/api{path}"
     result = _http_request(request_id, url, method="POST", body=body)
     if result is not None:
         tool_result(request_id, json.dumps(result, indent=2))
 
 
 def handle_healthz(request_id, arguments):
-    base_url = _get_base_url()
+    base_url = _cached_base_url or os.environ.get("ROSSUM_API_BASE", "https://elis.rossum.ai")
     validated = _validate_base_url(base_url)
     if not validated:
         return tool_result(request_id, f"Invalid base URL: {base_url}. Must be an HTTPS URL.", is_error=True)
@@ -501,23 +553,17 @@ def handle_set_token(request_id, arguments):
                 is_error=True,
             )
 
-    if not _check_health(base_url):
-        return tool_result(
-            request_id,
-            f"Data Storage API at {base_url} is not reachable. Check the base URL.",
-            is_error=True,
-        )
-
     if _probe_token(base_url, token):
         _cached_base_url = base_url
         _cached_token = token
         _token_validated = True
+        # Persist manually provided tokens back to prd2 credentials
+        if not org:
+            _persist_token_to_prd2(base_url, token)
         label = f" (org '{org}')" if org else ""
         return tool_result(request_id, f"Connected to {base_url}{label}. Token is valid and saved for this session.")
 
-    _cached_token = None
-    _cached_base_url = None
-    _token_validated = False
+    _invalidate_connection()
     return tool_result(
         request_id,
         f"Token is invalid or expired for {base_url}. Check the token and try again.",
@@ -558,7 +604,9 @@ def handle_list_search_indexes(request_id, arguments):
 
 
 def handle_list_users(request_id, arguments):
-    base_url = _get_base_url()
+    base_url, _ = _ensure_connection(request_id)
+    if not base_url:
+        return
     params = ["page_size=100"]
     if "is_active" in arguments:
         params.append(f"is_active={'true' if arguments['is_active'] else 'false'}")
@@ -570,7 +618,9 @@ def handle_list_users(request_id, arguments):
         page = _http_request(request_id, url)
         if page is None:
             return
-        all_results.extend(page.get("results", []))
+        _USER_FIELDS = ("id", "email", "first_name", "last_name", "is_active")
+        for user in page.get("results", []):
+            all_results.append({k: user[k] for k in _USER_FIELDS if k in user})
         next_url = page.get("pagination", {}).get("next")
         # Follow relative or absolute next URLs; stop if missing
         if not next_url:
