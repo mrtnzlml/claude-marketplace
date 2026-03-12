@@ -2,7 +2,6 @@
 """MCP server for Rossum APIs (read-only)."""
 
 import json
-import os
 import sys
 import urllib.error
 import urllib.request
@@ -11,7 +10,6 @@ from urllib.parse import urlparse
 _cached_base_url = None
 _cached_token = None
 _token_validated = False
-_cached_prd2_root = None
 
 
 # --- MCP protocol ---
@@ -71,99 +69,6 @@ def _validate_base_url(url):
     return origin
 
 
-# --- prd2 credential discovery ---
-
-
-def _parse_credentials(path):
-    """Parse a prd2 credentials.yaml file. Returns token string or None."""
-    try:
-        with open(path) as f:
-            for line in f:
-                stripped = line.strip()
-                if stripped.startswith("token:"):
-                    return stripped.split(":", 1)[1].strip().strip("'\"")
-    except OSError:
-        pass
-    return None
-
-
-def _parse_prd_config(path):
-    """Parse prd_config.yaml to extract org directories and their api_base URLs.
-
-    Returns dict: {org_name: api_base_url}
-    """
-    result = {}
-    try:
-        with open(path) as f:
-            lines = f.readlines()
-    except OSError:
-        return result
-
-    in_directories = False
-    current_org = None
-
-    for line in lines:
-        stripped = line.rstrip()
-        if not stripped or stripped.startswith("#"):
-            continue
-
-        indent = len(line) - len(line.lstrip())
-
-        if indent == 0 and stripped.startswith("directories"):
-            in_directories = True
-            current_org = None
-            continue
-
-        if indent == 0:
-            in_directories = False
-            continue
-
-        if not in_directories:
-            continue
-
-        if indent == 2 and stripped.endswith(":"):
-            current_org = stripped.rstrip(":").strip()
-            continue
-
-        if indent == 4 and current_org and stripped.startswith("api_base:"):
-            api_base = stripped.split(":", 1)[1].strip().strip("'\"")
-            result[current_org] = api_base
-
-    return result
-
-
-def _find_prd2_root(start=None):
-    """Walk up from start (or CWD) to find the prd2 project root (contains prd_config.yaml).
-
-    Caches the result so subsequent calls return immediately.
-    """
-    global _cached_prd2_root
-    if _cached_prd2_root:
-        return _cached_prd2_root
-
-    current = start or os.getcwd()
-    while True:
-        if os.path.isfile(os.path.join(current, "prd_config.yaml")):
-            _cached_prd2_root = current
-            return current
-        parent = os.path.dirname(current)
-        if parent == current:
-            return None
-        current = parent
-
-
-def _load_prd2_config(start=None):
-    """Find prd2 project root and parse its config.
-
-    Returns (project_root, config_dict) or (None, {}).
-    """
-    project_root = _find_prd2_root(start)
-    if not project_root:
-        return (None, {})
-    config = _parse_prd_config(os.path.join(project_root, "prd_config.yaml"))
-    return (project_root, config)
-
-
 # --- Connection state ---
 
 
@@ -210,9 +115,8 @@ def _ensure_connection(request_id):
 
     tool_result(
         request_id,
-        "Not connected to Rossum. Call rossum_set_token to establish a connection. "
-        "Pass cwd='<user-project-path>' to discover available prd2 environments, "
-        "or token='<token>' and baseUrl='<url>' for manual connection.",
+        "Not connected to Rossum. Call rossum_set_token(token='...', baseUrl='...') "
+        "to establish a connection. Ask the user for the token and base URL if unknown.",
         is_error=True,
     )
     return (None, None)
@@ -291,40 +195,21 @@ def _tool(name, description, schema):
 
 @_tool(
     "rossum_set_token",
-    "Establish a Rossum API connection for this session. Three modes: "
-    "(1) pass cwd to discover prd2 environments, "
-    "(2) pass org (+ optional cwd) to connect via prd2, "
-    "(3) pass token + baseUrl for manual connection. "
-    "Always confirm the chosen environment with the user before connecting.",
+    "Set the Rossum API connection for this session. Provide a token and base URL.",
     {
         "type": "object",
+        "required": ["token", "baseUrl"],
         "properties": {
-            "cwd": {
+            "token": {
                 "type": "string",
-                "description": (
-                    "Path to the user's working directory (or any path inside a prd2 project). "
-                    "Used to locate prd_config.yaml. Always pass the user's project directory."
-                ),
-            },
-            "org": {
-                "type": "string",
-                "description": (
-                    "Name of a prd2 organization directory (e.g. 'sandbox-org'). "
-                    "Reads the base URL from prd_config.yaml and token from credentials.yaml. "
-                    "If 'token' is also provided, uses it instead of credentials.yaml."
-                ),
+                "description": "Rossum API Bearer token.",
             },
             "baseUrl": {
                 "type": "string",
                 "description": (
                     "Base URL of the Rossum environment "
-                    "(e.g. https://elis.rossum.ai, https://customer-dev.rossum.app). "
-                    "Defaults to https://elis.rossum.ai. Ignored when 'org' is provided."
+                    "(e.g. https://elis.rossum.ai, https://customer-dev.rossum.app)."
                 ),
-            },
-            "token": {
-                "type": "string",
-                "description": "Rossum API Bearer token. If omitted with 'org', reads from credentials.yaml.",
             },
         },
     },
@@ -332,86 +217,28 @@ def _tool(name, description, schema):
 def handle_set_token(request_id, arguments):
     global _cached_base_url, _cached_token, _token_validated
 
-    cwd = arguments.get("cwd")
-    org = arguments.get("org")
-    token = arguments.get("token")
-    base_url_arg = arguments.get("baseUrl")
+    token = arguments.get("token", "")
+    raw_url = arguments.get("baseUrl", "")
 
-    # --- Phase 1: Discovery (cwd without org) → list environments for user selection ---
+    if not token:
+        return tool_result(request_id, "Missing 'token'.", is_error=True)
 
-    if cwd and not org and not token:
-        project_root, config = _load_prd2_config(cwd)
-        if not project_root:
-            return tool_result(request_id, f"No prd_config.yaml found at or above {cwd}.", is_error=True)
-        if not config:
-            return tool_result(request_id, "prd_config.yaml found but contains no organizations.", is_error=True)
-        orgs = ", ".join(f"'{name}' ({url})" for name, url in config.items())
-        return tool_result(
-            request_id,
-            f"Found prd2 project at {project_root} with environments: {orgs}. "
-            "Ask the user which environment to connect to, then call "
-            f"rossum_set_token(cwd='{cwd}', org='<chosen-org>').",
-        )
-
-    # --- Phase 2: Resolve base_url + token ---
-
-    if org:
-        # Org-based: resolve from prd2 project
-        project_root, config = _load_prd2_config(cwd)
-        if not project_root or not config:
-            return tool_result(request_id, "No prd2 project found.", is_error=True)
-        if org not in config:
-            available = ", ".join(f"'{n}'" for n in config)
-            return tool_result(
-                request_id,
-                f"Organization '{org}' not found. Available: {available}.",
-                is_error=True,
-            )
-        base_url = _validate_base_url(config[org])
-        if not base_url:
-            return tool_result(request_id, f"Invalid URL for '{org}': {config[org]}.", is_error=True)
-        if not token:
-            token = _parse_credentials(os.path.join(project_root, org, "credentials.yaml"))
-            if not token:
-                return tool_result(
-                    request_id,
-                    f"No token in {org}/credentials.yaml. "
-                    f"Ask the user for a Rossum API token, then call "
-                    f"rossum_set_token(cwd='{cwd}', org='{org}', token='<token>').",
-                    is_error=True,
-                )
-    elif token:
-        # Manual: token provided directly
-        raw_url = base_url_arg or "https://elis.rossum.ai"
-        base_url = _validate_base_url(raw_url)
-        if not base_url:
-            return tool_result(request_id, f"Invalid URL: {raw_url}. Must be HTTPS.", is_error=True)
-    else:
-        return tool_result(
-            request_id,
-            "Pass 'cwd' to discover prd2 environments, "
-            "'org' to connect to a known environment, "
-            "or 'token' + 'baseUrl' for manual connection.",
-            is_error=True,
-        )
-
-    # --- Phase 3: Validate and cache ---
+    base_url = _validate_base_url(raw_url)
+    if not base_url:
+        return tool_result(request_id, f"Invalid base URL: {raw_url}. Must be HTTPS.", is_error=True)
 
     if not _probe_token(base_url, token):
         _invalidate_connection()
-        source = f"'{org}' ({base_url})" if org else base_url
         return tool_result(
             request_id,
-            f"Token is invalid or expired for {source}. "
-            "Ask the user for a fresh token and retry.",
+            f"Token is invalid or expired for {base_url}. Ask the user for a fresh token.",
             is_error=True,
         )
 
     _cached_base_url = base_url
     _cached_token = token
     _token_validated = True
-    label = f" (org '{org}')" if org else ""
-    return tool_result(request_id, f"Connected to {base_url}{label}. Token validated for this session.")
+    return tool_result(request_id, f"Connected to {base_url}. Token validated for this session.")
 
 
 @_tool(
