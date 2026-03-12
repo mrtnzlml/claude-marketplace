@@ -5,7 +5,7 @@ import json
 import sys
 import urllib.error
 import urllib.request
-from urllib.parse import urlparse
+from urllib.parse import urlencode, urlparse
 
 _cached_base_url = None
 _cached_token = None
@@ -367,6 +367,75 @@ def handle_list_users(request_id, arguments):
             return
         for user in page.get("results", []):
             all_results.append({k: user[k] for k in _USER_FIELDS if k in user})
+        next_url = page.get("pagination", {}).get("next")
+        if not next_url:
+            break
+        if _validate_base_url(next_url) != _validate_base_url(url):
+            break
+        url = next_url
+
+    tool_result(request_id, json.dumps({"total": len(all_results), "results": all_results}, indent=2))
+
+
+@_tool(
+    "rossum_list_audit_logs",
+    "List audit log entries. Supports filtering by date range, user, action type, and object type. "
+    "Returns up to max_results entries (default 100).",
+    {
+        "type": "object",
+        "required": ["object_type"],
+        "properties": {
+            "object_type": {
+                "type": "string",
+                "description": "Object type to query (e.g. 'annotation', 'queue', 'hook', 'schema', 'workspace', 'user', 'organization').",
+            },
+            "timestamp_after": {
+                "type": "string",
+                "description": "ISO 8601 datetime. Only logs after this time (e.g. '2025-01-01T00:00:00Z').",
+            },
+            "timestamp_before": {
+                "type": "string",
+                "description": "ISO 8601 datetime. Only logs before this time.",
+            },
+            "user": {"type": "integer", "description": "Filter by user ID."},
+            "action": {
+                "type": "string",
+                "description": "Filter by action (e.g. 'create', 'update', 'delete', 'export').",
+            },
+            "ordering": {
+                "type": "string",
+                "description": "Sort order. Default: '-id' (newest first). Use 'id' for oldest first.",
+            },
+            "max_results": {
+                "type": "integer",
+                "description": "Maximum entries to return (default: 100, max: 1000).",
+            },
+        },
+    },
+)
+def handle_list_audit_logs(request_id, arguments):
+    base_url, _ = _ensure_connection(request_id)
+    if not base_url:
+        return
+
+    max_results = min(arguments.get("max_results", 100), 1000)
+    page_size = min(max_results, 100)
+    params = [("page_size", page_size)]
+    for key in ("timestamp_after", "timestamp_before", "user", "action", "object_type", "ordering"):
+        if key in arguments:
+            params.append((key, arguments[key]))
+
+    url = f"{base_url}/api/v1/audit_logs?{urlencode(params)}"
+    all_results = []
+
+    while url and len(all_results) < max_results:
+        page = _http_request(request_id, url)
+        if page is None:
+            return
+        for entry in page.get("results", []):
+            if len(all_results) >= max_results:
+                break
+            all_results.append(entry)
         next_url = page.get("pagination", {}).get("next")
         if not next_url:
             break
