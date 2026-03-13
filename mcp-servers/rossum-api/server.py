@@ -462,6 +462,33 @@ def handle_list_audit_logs(request_id, arguments):
     tool_result(request_id, json.dumps({"total": len(all_results), "results": all_results}, indent=2))
 
 
+@_tool(
+    "rossum_get_annotation_content",
+    "Retrieves the extracted data (content) of a single annotation. "
+    "Returns the annotation's data tree: sections containing datapoints and multivalues (tables).",
+    {
+        "type": "object",
+        "required": ["annotation_id"],
+        "properties": {
+            "annotation_id": {
+                "type": "integer",
+                "description": "The annotation ID.",
+            },
+        },
+        "additionalProperties": False,
+    },
+)
+def handle_get_annotation_content(request_id, arguments):
+    base_url, _ = _ensure_connection(request_id)
+    if not base_url:
+        return
+    annotation_id = arguments["annotation_id"]
+    url = f"{base_url}/api/v1/annotations/{annotation_id}/content"
+    result = _http_request(request_id, url)
+    if result is not None:
+        tool_result(request_id, json.dumps(result, indent=2))
+
+
 # --- Main loop ---
 
 
