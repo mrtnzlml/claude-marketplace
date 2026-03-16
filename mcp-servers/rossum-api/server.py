@@ -2,10 +2,17 @@
 """MCP server for Rossum APIs (read-only)."""
 
 import json
+import ssl
 import sys
 import urllib.error
 import urllib.request
 from urllib.parse import urlencode, urlparse
+
+try:
+    import certifi
+    _ssl_context = ssl.create_default_context(cafile=certifi.where())
+except ImportError:
+    _ssl_context = ssl.create_default_context()
 
 _cached_base_url = None
 _cached_token = None
@@ -79,14 +86,14 @@ def _check_health(base_url):
         method="GET",
     )
     try:
-        with urllib.request.urlopen(req, timeout=10) as resp:
+        with urllib.request.urlopen(req, timeout=10, context=_ssl_context) as resp:
             return resp.status == 200
     except Exception:
         return False
 
 
 def _probe_token(base_url, token):
-    """Validate a token with a lightweight API call."""
+    """Validate a token with a lightweight API call. Returns (ok, error_detail)."""
     req = urllib.request.Request(
         f"{base_url}/svc/data-storage/api/v1/collections/list",
         data=json.dumps({"nameOnly": True}).encode("utf-8"),
@@ -94,10 +101,14 @@ def _probe_token(base_url, token):
         method="POST",
     )
     try:
-        with urllib.request.urlopen(req, timeout=10) as resp:
-            return resp.status == 200
-    except Exception:
-        return False
+        with urllib.request.urlopen(req, timeout=10, context=_ssl_context) as resp:
+            return (True, None)
+    except urllib.error.HTTPError as e:
+        return (False, f"HTTP {e.code}: {e.read().decode('utf-8', errors='replace')[:200]}")
+    except ssl.SSLError as e:
+        return (False, f"SSL error: {e}. Try: python3 -m pip install certifi")
+    except Exception as e:
+        return (False, f"{type(e).__name__}: {e}")
 
 
 def _invalidate_connection():
@@ -143,7 +154,7 @@ def _http_request(request_id, url, *, method="GET", body=None):
     req = urllib.request.Request(url, data=data, headers=headers, method=method)
 
     try:
-        with urllib.request.urlopen(req, timeout=130) as resp:
+        with urllib.request.urlopen(req, timeout=130, context=_ssl_context) as resp:
             return json.loads(resp.read().decode("utf-8"))
     except urllib.error.HTTPError as e:
         error_body = e.read().decode("utf-8") if e.fp else str(e)
@@ -228,11 +239,13 @@ def handle_set_token(request_id, arguments):
     if not base_url:
         return tool_result(request_id, f"Invalid base URL: {raw_url}. Must be HTTPS.", is_error=True)
 
-    if not _probe_token(base_url, token):
+    ok, detail = _probe_token(base_url, token)
+    if not ok:
         _invalidate_connection()
         return tool_result(
             request_id,
-            f"Token is invalid or expired for {base_url}. Ask the user for a fresh token.",
+            f"Cannot connect to {base_url}: {detail}. "
+            f"If this is not an auth error, the token may still be valid — check the error above.",
             is_error=True,
         )
 
