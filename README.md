@@ -24,9 +24,21 @@ Upgrades deprecated Rossum extensions to modern equivalents. Currently covers va
 
 A comprehensive Rossum.ai platform reference (API, TxScript, Aurora AI, Master Data Hub, extensions, etc.) that Claude loads automatically when relevant. Not invocable as a slash command.
 
-### MongoDB Reference (auto-loaded)
+### Master Data Hub (MDH) Reference (auto-loaded)
 
-A MongoDB query language reference tailored for Rossum.ai Master Data Hub. Covers find queries, aggregation pipelines, Atlas Search, operators, and practical matching patterns for data matching configurations. Auto-loaded when relevant.
+Complete MDH reference combining the MDH API, matching query design, and MongoDB query syntax. Covers dataset management (upload, replace, delete), the hook configuration model (MatchConfig, mapping, result actions, query cascades), query design rules (DO/DON'T), score normalization, `$setWindowFields` unique-result patterns, GL coding dropdown pre-selection, Atlas Search index recommendations, detailed real-world examples, MongoDB find/aggregate operators, `$search` with fuzzy/compound/dynamic thresholds, `$lookup`, `$unionWith`, `$function`, performance tips, and debugging. Auto-loaded when relevant.
+
+### Data Storage API Reference (auto-loaded)
+
+Rossum's Data Storage REST API reference — a MongoDB-compatible data layer. Covers collection management, CRUD operations (insert, update, delete, replace, find), aggregation pipelines, bulk write, index management, and Atlas Search indexes. Includes async operation patterns and response schemas. Auto-loaded when relevant.
+
+### TxScript & Serverless Functions Reference (auto-loaded)
+
+Practical guide for writing Rossum serverless functions using the TxScript Python 3.12 API. Covers the `TxScript` class pattern (`TxScript.from_payload()`), field access, utility functions, user messages, automation blockers, validation recipes (face value checks, required fields, date ranges), and common schema field conventions. Auto-loaded when relevant.
+
+### SAP Integration Reference (auto-loaded)
+
+SAP integration guide covering the SAP product landscape (S4 HANA Public/Private Cloud, ECC 6, Ariba, VIM, CIM, BTP), master data exchange challenges, IDOC generation patterns (INVOIC02, ORDERS05), middleware requirements, AP/AR terminology, and real customer implementation examples. Auto-loaded when relevant.
 
 ### prd2 Reference (auto-loaded)
 

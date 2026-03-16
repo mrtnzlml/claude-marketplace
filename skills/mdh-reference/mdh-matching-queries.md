@@ -1,0 +1,859 @@
+# MDH Matching Query Guide
+
+Complete reference for building MongoDB aggregation queries in Rossum Master Data Hub matching configurations. Use this when creating or modifying MDH hook configurations that match extracted document data against master data records.
+
+---
+
+## Configuration Schema
+
+### Top-Level Structure
+
+```json
+{
+  "name": "Human-readable config name",
+  "source": { },
+  "mapping": { },
+  "additional_mappings": [ ],
+  "result_actions": { },
+  "default": { },
+  "action_condition": "Python-like expression, e.g. \"True\"",
+  "queue_ids": [ ]
+}
+```
+
+| Key | Type | Required | Description |
+|-----|------|----------|-------------|
+| `source` | object | yes | Dataset and query logic |
+| `mapping` | object | yes | Winner-to-document field mapping |
+| `additional_mappings` | array | no | Extra fields populated from the winner record |
+| `result_actions` | object | yes | UI behavior by match count |
+| `default` | object | no | Fallback value when no match found |
+| `action_condition` | string | no | Python-like condition expression |
+| `queue_ids` | array | no | Queue IDs where this config is active |
+
+### `source`
+
+```json
+"source": {
+  "dataset": "collection_name",
+  "queries": [
+    { "aggregate": [ /* pipeline stages */ ] },
+    { "aggregate": [ /* fallback pipeline */ ] }
+  ]
+}
+```
+
+- `dataset`: MDH dataset/collection identifier.
+- `queries`: Ordered array of query objects. Execution stops after the first query that returns a valid result.
+- Each query object **must** contain `aggregate` (MongoDB aggregation pipeline). Always use `aggregate`-only queries.
+
+### `mapping`
+
+```json
+"mapping": {
+  "target_schema_id": "vendor_match",
+  "dataset_key": "internal_id",
+  "label_template": "{\"name\"} - {\"city\"}"
+}
+```
+
+- `target_schema_id`: Rossum field (enum type) that stores the result.
+- `dataset_key`: Dataset field used as the technical key value.
+- `label_template`: UI display format. Use escaped double quotes around field names.
+- `label_keys`: Legacy alternative to `label_template`.
+
+### `additional_mappings`
+
+Populate multiple Rossum fields from one winner record:
+
+```json
+"additional_mappings": [
+  { "dataset_key": "name", "target_schema_id": "vendor_name_match" },
+  { "dataset_key": "VAT_CODE", "target_schema_id": "vat_code_supplier" }
+]
+```
+
+### `result_actions`
+
+```json
+"result_actions": {
+  "no_match_found": {
+    "select": "default",
+    "message": { "type": "error", "content": "No match found" }
+  },
+  "one_match_found": {
+    "select": "best_match"
+  },
+  "multiple_matches_found": {
+    "select": "best_match",
+    "message": { "type": "warning", "content": "Multiple matches found" }
+  }
+}
+```
+
+- `select`: `"best_match"`, `"best"`, or `"default"`
+- `message.type`: `"error"`, `"warning"`, or `"info"`
+
+### Placeholders and Filters
+
+Values from extracted document fields are injected via placeholders:
+
+| Syntax | Description |
+|--------|-------------|
+| `{schema_id}` | Basic placeholder — replaced with the extracted field value |
+| `{schema_id \| re}` | Regex-safe — escapes special characters for `$regex` |
+| `{schema_id \| split(' ')}` | Split — turns string into array of words |
+| `{secrets.api_key}` | Secret reference — accesses stored credentials |
+
+Schema IDs come from queue schema fields where `category` is `"datapoint"`. Only the `id` value of datapoint-category fields should be used as placeholders.
+
+---
+
+## Query Design Rules
+
+### Matching Order (mandatory)
+
+1. **Exact identifiers first** — VAT/tax ID, normalized PO reference, ERP IDs
+2. **Exact reference combinations second** — supplier + order reference
+3. **Fuzzy search last** — name/address/description combinations
+
+### DO
+
+1. Prefer exact matching before fuzzy matching. Never do exact matching on names/addresses — use fuzzy for those.
+2. When `$search` is used:
+   - Always follow with `$limit` (default 20 unless use case requires otherwise).
+   - Capture score via `$addFields: { "_score": { "$meta": "searchScore" } }`.
+   - Filter low-confidence matches with a score threshold.
+   - Combine multiple strategies: use `phrase` and `text` searches with appropriate `slop` and `fuzzy` settings.
+3. In fuzzy search, combine relevant parameters in `compound` queries using `must`, `should`, and `filter`.
+4. Boost only `must` clauses in compound search — never boost `should`.
+5. If regex behavior is needed, use `$search` with `regex` operator and a keyword analyzer index.
+6. Use `$project` to return only attributes needed for document mapping.
+7. Use JSON-compatible syntax with double-quoted keys and string values.
+8. Place `$match` or `$search` early to reduce the candidate set quickly.
+9. Keep pipelines deterministic.
+
+### DON'T
+
+1. Do not convert data types for matching logic (exception: after `$match` has already reduced the dataset significantly).
+2. Do not use case-insensitive regex (`$regex` with `"$options": "i"`).
+3. Do not use unanchored case-sensitive regex.
+4. Do not use `$facet` — use sequential queries or `$unionWith` instead.
+5. Do not use deprecated or JavaScript operators (`$function`, `$where`).
+6. Do not use `$expr` with nested `$and` / `$or`.
+7. Never deploy configuration to remote without user confirmation.
+8. Default result window is 20 for fuzzy/search stages. Runtime guardrail cap is 50 records for interactive previews.
+9. Never dump full datasets in user-facing responses.
+
+---
+
+## Score Normalization Pattern
+
+When fuzzy matching by name or address, raw `searchScore` can vary widely. Use length-ratio normalization to penalize matches where the candidate is much longer or shorter than the query:
+
+```json
+{
+  "$addFields": {
+    "score": { "$meta": "searchScore" }
+  }
+},
+{
+  "$addFields": {
+    "new_score": {
+      "$divide": [
+        "$score",
+        {
+          "$add": [
+            1,
+            {
+              "$abs": {
+                "$subtract": [
+                  1,
+                  { "$divide": [
+                    { "$strLenCP": "$FIELD_NAME" },
+                    { "$strLenCP": "{placeholder_value}" }
+                  ]}
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  }
+},
+{
+  "$addFields": {
+    "normalized_score": {
+      "$divide": [
+        "$new_score",
+        { "$add": [1, "$new_score"] }
+      ]
+    }
+  }
+},
+{ "$sort": { "normalized_score": -1 } },
+{ "$match": { "normalized_score": { "$gt": 0.8 } } }
+```
+
+- The `new_score` divides raw score by the length ratio deviation, penalizing mismatched lengths.
+- The `normalized_score` applies a sigmoid-like normalization to bound values between 0 and 1.
+- Threshold `0.8` is typical for name-only matching; use `0.9` when combining name + address.
+
+---
+
+## Unique-Result Filter Pattern (`$setWindowFields`)
+
+Use `$setWindowFields` to count matches and conditionally filter. This is useful for ensuring only single-match results are returned (auto-select) or for combining exact matches with a "please select" default record:
+
+```json
+{
+  "$setWindowFields": {
+    "output": {
+      "mainMatch": { "$count": {} }
+    }
+  }
+},
+{
+  "$match": { "mainMatch": 1 }
+}
+```
+
+This keeps results only when exactly one record matched — useful for auto-selecting exact matches.
+
+---
+
+## GL Coding / Dropdown Pre-selection Pattern
+
+When all options should be shown but the best match should be pre-selected:
+
+1. Exact match the target value
+2. Count matches with `$setWindowFields`
+3. `$unionWith` a synthetic "Please select" empty record
+4. Count again to detect whether exact match existed
+5. If exact match exists, remove the empty placeholder
+6. `$unionWith` all remaining records from the collection
+7. Use `multiple_matches_found: { select: "best_match" }` — exact match sits on top
+
+This pattern ensures: if exact match found, it's pre-selected; otherwise, the empty placeholder forces user selection.
+
+---
+
+## Query Examples
+
+### Example 1: Supplier Match — VAT First, Name Fallback
+
+**Scenario:** VAT is the strongest key. Supplier name is fuzzy fallback.
+
+```json
+{
+  "source": {
+    "dataset": "vendors_master_list",
+    "queries": [
+      {
+        "aggregate": [
+          {
+            "$match": {
+              "vatin": "{sender_vat}",
+              "status": "active"
+            }
+          },
+          {
+            "$project": {
+              "_id": 0, "internal_id": 1, "name": 1, "city": 1, "vatin": 1
+            }
+          }
+        ]
+      },
+      {
+        "aggregate": [
+          {
+            "$search": {
+              "index": "vendor_name_idx",
+              "compound": {
+                "must": [
+                  {
+                    "phrase": {
+                      "path": "name",
+                      "query": "{sender_name}",
+                      "slop": 1,
+                      "score": { "boost": { "value": 3 } }
+                    }
+                  }
+                ],
+                "filter": [
+                  { "equals": { "path": "status", "value": "active" } }
+                ]
+              }
+            }
+          },
+          { "$addFields": { "_score": { "$meta": "searchScore" } } },
+          { "$match": { "_score": { "$gte": 7 } } },
+          { "$limit": 20 },
+          {
+            "$project": {
+              "_id": 0, "internal_id": 1, "name": 1, "city": 1, "vatin": 1, "_score": 1
+            }
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+**Why this order:**
+- VAT exact match gives highest precision with lowest false positives.
+- Name fallback is fuzzy and score-filtered, reducing weak matches.
+
+### Example 2: PO Match — Exact Reference + Fuzzy Fallback
+
+**Scenario:** PO reference can be noisy. First try normalized reference, then compound fuzzy on supplier and reference text.
+
+```json
+{
+  "source": {
+    "dataset": "purchase_orders",
+    "queries": [
+      {
+        "aggregate": [
+          {
+            "$match": {
+              "order_id_normalized": "{order_id_normalized}",
+              "supplier_id": "{supplier_id}",
+              "status": "open"
+            }
+          },
+          {
+            "$project": {
+              "_id": 0, "po_internal_id": 1, "order_id_normalized": 1,
+              "supplier_id": 1, "currency": 1
+            }
+          }
+        ]
+      },
+      {
+        "aggregate": [
+          {
+            "$search": {
+              "index": "po_search_idx",
+              "compound": {
+                "must": [
+                  {
+                    "text": {
+                      "path": "supplier_name",
+                      "query": "{supplier_name}",
+                      "fuzzy": { "maxEdits": 1, "prefixLength": 2 },
+                      "score": { "boost": { "value": 2 } }
+                    }
+                  }
+                ],
+                "should": [
+                  {
+                    "phrase": {
+                      "path": "order_reference",
+                      "query": "{order_reference}",
+                      "slop": 1
+                    }
+                  }
+                ],
+                "filter": [
+                  { "equals": { "path": "status", "value": "open" } }
+                ]
+              }
+            }
+          },
+          { "$addFields": { "_score": { "$meta": "searchScore" } } },
+          { "$match": { "_score": { "$gte": 6 } } },
+          { "$limit": 20 },
+          {
+            "$project": {
+              "_id": 0, "po_internal_id": 1, "order_id_normalized": 1,
+              "supplier_id": 1, "order_reference": 1, "_score": 1
+            }
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+### Example 3: Lookup-Based Delivery Address Resolution
+
+**Scenario:** Resolve supplier by exact ID, then join delivery locations and match delivery code.
+
+```json
+{
+  "source": {
+    "dataset": "suppliers",
+    "queries": [
+      {
+        "aggregate": [
+          {
+            "$match": {
+              "supplier_id": "{supplier_id}",
+              "status": "active"
+            }
+          },
+          {
+            "$lookup": {
+              "from": "delivery_addresses",
+              "localField": "supplier_id",
+              "foreignField": "supplier_id",
+              "as": "delivery_locations"
+            }
+          },
+          { "$unwind": "$delivery_locations" },
+          {
+            "$match": {
+              "delivery_locations.address_code": "{delivery_address_code}"
+            }
+          },
+          {
+            "$project": {
+              "_id": 0, "supplier_id": 1, "supplier_name": 1,
+              "delivery_code": "$delivery_locations.address_code",
+              "delivery_name": "$delivery_locations.address_name",
+              "delivery_city": "$delivery_locations.city"
+            }
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+### Example 4: Advanced Supplier Matching — Multi-Stage with Score Normalization
+
+**Scenario:** Four-stage cascade: (1) exact VAT with non-empty guard, (2) regex search on VAT in supplier name via keyword index, (3) fuzzy name with phrase+text and normalized scoring, (4) name+address compound with higher threshold.
+
+```json
+{
+  "source": {
+    "dataset": "SUPPLIERS",
+    "queries": [
+      {
+        "comment": "Stage 1: Exact VAT match with country prefix variants",
+        "aggregate": [
+          {
+            "$match": {
+              "$and": [
+                { "$or": [
+                  { "VAT_REG_NO": "GB{sender_vat_id_normalized}" },
+                  { "VAT_REG_NO": "{sender_vat_id_normalized}" }
+                ]},
+                { "VAT_REG_NO": { "$ne": "" } },
+                { "KCO": "{kco}" },
+                { "DORMANT": false }
+              ]
+            }
+          },
+          {
+            "$group": {
+              "_id": "$SUPPLIER_REF",
+              "name": { "$first": "$SUPPLIER_NAME" },
+              "VAT_CODE": { "$first": "$VAT_CODE" }
+            }
+          },
+          {
+            "$project": {
+              "id": "$_id", "name": "$name", "VAT_CODE": 1
+            }
+          },
+          {
+            "$setWindowFields": {
+              "output": { "mainMatch": { "$count": {} } }
+            }
+          },
+          { "$match": { "mainMatch": 1 } }
+        ]
+      },
+      {
+        "comment": "Stage 2: Regex search on VAT in supplier name (keyword index)",
+        "aggregate": [
+          {
+            "$search": {
+              "index": "default_kw",
+              "regex": {
+                "path": "SUPPLIER_NAME",
+                "query": ".*{sender_vat_id_normalized}"
+              }
+            }
+          },
+          { "$limit": 15 },
+          { "$match": { "KCO": "{kco}", "DORMANT": false } },
+          {
+            "$project": {
+              "id": "$SUPPLIER_REF", "name": "$SUPPLIER_NAME", "VAT_CODE": 1
+            }
+          }
+        ]
+      },
+      {
+        "comment": "Stage 3: Fuzzy name match with phrase+text and score normalization",
+        "aggregate": [
+          {
+            "$search": {
+              "compound": {
+                "filter": [
+                  { "equals": { "path": "DORMANT", "value": false } },
+                  { "in": { "path": "KCO", "value": ["{kco}"] } }
+                ],
+                "should": [
+                  {
+                    "phrase": {
+                      "path": ["SUPPLIER_NAME"], "slop": 2,
+                      "query": "{sender_name}"
+                    }
+                  },
+                  {
+                    "text": {
+                      "path": ["SUPPLIER_NAME"],
+                      "fuzzy": { "maxEdits": 1 },
+                      "query": "{sender_name}"
+                    }
+                  }
+                ]
+              }
+            }
+          },
+          { "$limit": 15 },
+          { "$addFields": { "score": { "$meta": "searchScore" } } },
+          {
+            "$addFields": {
+              "new_score": {
+                "$divide": ["$score", {
+                  "$add": [1, { "$abs": { "$subtract": [1, {
+                    "$divide": [
+                      { "$strLenCP": "$SUPPLIER_NAME" },
+                      { "$strLenCP": "{sender_name}" }
+                    ]
+                  }]}}]
+                }]
+              }
+            }
+          },
+          {
+            "$addFields": {
+              "normalized_score": {
+                "$divide": ["$new_score", { "$add": [1, "$new_score"] }]
+              }
+            }
+          },
+          { "$sort": { "normalized_score": -1 } },
+          { "$match": { "normalized_score": { "$gt": 0.8 } } },
+          {
+            "$project": {
+              "id": "$SUPPLIER_REF", "name": "$SUPPLIER_NAME", "VAT_CODE": 1
+            }
+          }
+        ]
+      },
+      {
+        "comment": "Stage 4: Name (must) + address (should) with higher threshold",
+        "aggregate": [
+          {
+            "$search": {
+              "compound": {
+                "must": [
+                  {
+                    "text": {
+                      "path": ["SUPPLIER_NAME"],
+                      "fuzzy": { "maxEdits": 1 },
+                      "query": "{sender_name}",
+                      "score": { "boost": { "value": 2 } }
+                    }
+                  }
+                ],
+                "filter": [
+                  { "equals": { "path": "DORMANT", "value": false } },
+                  { "in": { "path": "KCO", "value": ["{kco}"] } }
+                ],
+                "should": [
+                  {
+                    "text": {
+                      "path": ["ADDRESS_1", "ADDRESS_2", "ADDRESS_3", "ADDRESS_4", "POSTCODE"],
+                      "fuzzy": { "maxEdits": 1 },
+                      "query": "{sender_address}",
+                      "score": { "boost": { "value": 0.75 } }
+                    }
+                  }
+                ]
+              }
+            }
+          },
+          { "$limit": 15 },
+          { "$addFields": { "score": { "$meta": "searchScore" } } },
+          {
+            "$addFields": {
+              "new_score": {
+                "$divide": ["$score", {
+                  "$add": [1, { "$abs": { "$subtract": [1, {
+                    "$divide": [
+                      { "$strLenCP": {
+                        "$concat": [
+                          { "$ifNull": ["$SUPPLIER_NAME", ""] },
+                          { "$ifNull": ["$ADDRESS_1", ""] },
+                          { "$ifNull": ["$ADDRESS_2", ""] },
+                          { "$ifNull": ["$ADDRESS_3", ""] },
+                          { "$ifNull": ["$ADDRESS_4", ""] },
+                          { "$ifNull": ["$POSTCODE", ""] }
+                        ]
+                      }},
+                      { "$strLenCP": "{sender_name} {sender_address}" }
+                    ]
+                  }]}}]
+                }]
+              }
+            }
+          },
+          {
+            "$addFields": {
+              "normalized_score": {
+                "$divide": ["$new_score", { "$add": [1, "$new_score"] }]
+              }
+            }
+          },
+          { "$sort": { "normalized_score": -1 } },
+          { "$match": { "normalized_score": { "$gt": 0.9 } } },
+          {
+            "$project": {
+              "id": "$SUPPLIER_REF", "name": "$SUPPLIER_NAME", "VAT_CODE": 1
+            }
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+**Key techniques:**
+- Stage 1 uses `$setWindowFields` + `mainMatch: 1` to auto-select only when exactly one result.
+- Stage 2 uses `$search` with `regex` on a keyword index for VAT-in-name matching.
+- Stages 3-4 use length-ratio score normalization to penalize mismatched candidate lengths.
+- Stage 4 uses a higher threshold (0.9) because address adds more signal.
+- `must` gets boosted, `should` does not (per compound search rules).
+
+### Example 5: PO Line Item Matching with Amount Comparison
+
+**Scenario:** Match PO line items by order number and supplier, then compare line amounts. Data type conversion is acceptable here because `$match` has already reduced the dataset.
+
+```json
+{
+  "name": "PO by order number on line items",
+  "source": {
+    "dataset": "workday_purchase_order",
+    "queries": [
+      {
+        "aggregate": [
+          {
+            "$match": {
+              "Document_Number": "{item_order_id_mod}",
+              "Supplier_Reference.ID.type": "Supplier_ID",
+              "Supplier_Reference.ID._value_1": "{supplier_wd}"
+            }
+          },
+          {
+            "$unwind": {
+              "path": "$Goods_Line_Data",
+              "preserveNullAndEmptyArrays": true
+            }
+          },
+          {
+            "$match": {
+              "Goods_Line_Data.Resource_Category_Reference.ID": {
+                "$not": {
+                  "$elemMatch": {
+                    "type": "Spend_Category_ID",
+                    "_value_1": "CONVERSION"
+                  }
+                }
+              }
+            }
+          },
+          { "$addFields": { "convertedPrice": { "$toDecimal": "{item_total_base}" } } },
+          { "$addFields": { "convertedAmount": { "$toDecimal": "$Goods_Line_Data.Extended_Amount" } } },
+          {
+            "$match": {
+              "$expr": { "$eq": ["$convertedAmount", "$convertedPrice"] }
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "action_condition": "'{supplier_invoice_any_wd}' != 'True'",
+  "mapping": {
+    "dataset_key": "Goods_Line_Data.Line_Number",
+    "label_template": "{Document_Number} - Line: {Goods_Line_Data.Line_Number}",
+    "target_schema_id": "item_order_id_wd"
+  },
+  "result_actions": {
+    "no_match_found": {
+      "select": "default",
+      "message": { "type": "error", "content": "PO line match not found." }
+    },
+    "one_match_found": { "select": "best_match" },
+    "multiple_matches_found": {
+      "select": "best_match",
+      "message": { "type": "warning", "content": "Multiple PO line matches found. (best match)" }
+    }
+  },
+  "additional_mappings": [
+    { "dataset_key": "Document_Number", "target_schema_id": "item_document_number_po_wd" },
+    { "dataset_key": "Goods_Line_Data.Line_Number", "target_schema_id": "item_order_line_nr_wd" },
+    { "dataset_key": "Goods_Line_Data.Extended_Amount", "target_schema_id": "item_order_line_amount" },
+    { "dataset_key": "Goods_Line_Data.Unit_Cost", "target_schema_id": "item_po_unit_cost" }
+  ]
+}
+```
+
+### Example 6: GL Coding — Dropdown Pre-Selection with Full List
+
+**Scenario:** Cost center matching. If exact match found, pre-select it at the top. Otherwise show a "Please select" placeholder. Always show all available cost centers below.
+
+```json
+{
+  "name": "Cost center matching",
+  "source": {
+    "dataset": "workday_cost_center",
+    "queries": [
+      {
+        "aggregate": [
+          {
+            "$match": {
+              "Organization_Data.Organization_Code": "{item_cc_distributed}"
+            }
+          },
+          {
+            "$setWindowFields": {
+              "output": { "mainMatch": { "$count": {} } }
+            }
+          },
+          {
+            "$unionWith": {
+              "pipeline": [
+                {
+                  "$documents": [
+                    {
+                      "Organization_Data": {
+                        "ID": "",
+                        "Organization_Code": "Please select",
+                        "Organization_Name": ""
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "$setWindowFields": {
+              "output": { "mainMatchWithDefault": { "$count": {} } }
+            }
+          },
+          {
+            "$match": {
+              "$expr": {
+                "$cond": {
+                  "if": {
+                    "$and": [
+                      { "$gt": ["$mainMatchWithDefault", "$mainMatch"] },
+                      { "$gt": ["$mainMatchWithDefault", 1] }
+                    ]
+                  },
+                  "then": { "$gt": ["$mainMatch", 0] },
+                  "else": { "$eq": [1, 1] }
+                }
+              }
+            }
+          },
+          {
+            "$unionWith": {
+              "coll": "workday_cost_center",
+              "pipeline": [
+                {
+                  "$match": {
+                    "Organization_Data.Organization_Code": {
+                      "$ne": "{item_cc_distributed}"
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "$match": {
+              "Organization_Data.Organization_Active": true
+            }
+          },
+          {
+            "$project": {
+              "Organization_Data.ID": 1,
+              "Organization_Data.Organization_Code": 1,
+              "Organization_Data.Organization_Name": 1
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "mapping": {
+    "dataset_key": "Organization_Data.ID",
+    "label_template": "{Organization_Data.Organization_Code} {Organization_Data.Organization_Name}",
+    "target_schema_id": "item_cost_center_wd"
+  },
+  "result_actions": {
+    "no_match_found": {
+      "select": "default",
+      "message": { "type": "error", "content": "Cost Center match not found." }
+    },
+    "one_match_found": { "select": "best_match" },
+    "multiple_matches_found": { "select": "best_match" }
+  }
+}
+```
+
+**Key technique:** The double `$setWindowFields` + `$cond` logic removes the "Please select" placeholder only when an exact match exists. Combined with `multiple_matches_found: best_match`, the exact match auto-selects when found; otherwise the empty placeholder is selected, forcing user choice.
+
+---
+
+## Atlas Search Index Recommendations
+
+When using `$search` with `regex`, create a keyword analyzer index:
+
+```json
+{
+  "mappings": {
+    "fields": {
+      "SUPPLIER_NAME": { "type": "string", "analyzer": "lucene.keyword" },
+      "VAT_REG_NO": { "type": "string", "analyzer": "lucene.keyword" }
+    }
+  }
+}
+```
+
+For `text` and `phrase` queries, the default analyzer is usually sufficient. Create a named index (e.g., `vendor_name_idx`, `po_search_idx`) and reference it in the `$search` stage.
+
+---
+
+## Required Input from Solution Architect
+
+Before building a matching configuration, gather:
+
+1. **Base URL and Bearer token** for MDH API authentication
+2. **Matching entity** — supplier, purchase order, delivery address, product, GL code, etc.
+3. **MDH collection name**
+4. **Schema IDs** to use as query placeholders (from the queue schema, `category: "datapoint"` fields only)
+5. **Attributes to return** from MongoDB — used in `$project` stages
+6. **Optional lookup details** — collection name, local/foreign keys, attributes from joined collection
+
+## Output Requirements
+
+When generating a matching configuration, always provide:
+
+1. **Complete JSON configuration** — ready to deploy
+2. **Technical explanation** — matching order rationale, fuzzy logic, tuning points, and score thresholds

@@ -1409,3 +1409,141 @@ Sandboxes enable isolated development and deployment workflows. Paid feature req
 Pre-built integrations available for: **SAP**, **Coupa**, **NetSuite**, **Workday**, **Microsoft Dynamics**, **Oracle**, **Xero**, **QuickBooks**.
 
 Integration architecture supports low-code extensions, editable code, and turnkey integrations via microservices.
+
+---
+
+## Schema Field Templates
+
+Common JSON templates for adding fields to Rossum schemas.
+
+### Captured String Field
+
+```json
+{
+  "rir_field_names": [],
+  "constraints": {"required": false},
+  "default_value": null,
+  "category": "datapoint",
+  "id": "FIELD_ID",
+  "label": "Label",
+  "hidden": false,
+  "disable_prediction": false,
+  "type": "string",
+  "can_export": true,
+  "ui_configuration": {"type": "captured", "edit": "enabled"}
+}
+```
+
+### Enum Field (MDH-Matched)
+
+```json
+{
+  "rir_field_names": [],
+  "constraints": {"required": false},
+  "score_threshold": 0.0,
+  "default_value": null,
+  "category": "datapoint",
+  "id": "FIELD_ID",
+  "label": "Label",
+  "hidden": false,
+  "disable_prediction": true,
+  "type": "enum",
+  "can_export": true,
+  "ui_configuration": {"type": "data", "edit": "enabled"},
+  "options": [],
+  "enum_value_type": "string"
+}
+```
+
+### Formula Field
+
+```json
+{
+  "rir_field_names": [],
+  "constraints": {"required": false},
+  "score_threshold": 0.0,
+  "default_value": null,
+  "category": "datapoint",
+  "id": "FIELD_ID",
+  "label": "Label",
+  "hidden": false,
+  "disable_prediction": true,
+  "type": "string",
+  "can_export": true,
+  "ui_configuration": {"type": "formula", "edit": "disabled"},
+  "formula": "field.source_field"
+}
+```
+
+---
+
+## Memorization Extension Settings
+
+The memorization extension saves user corrections to a Data Storage collection for future automatic matching. Configuration stored in `hook.settings`:
+
+```json
+{
+  "collection_name": "_collection_memorization_test",
+  "datapoints_to_save": [
+    {"schema_id": "natural_key_field", "is_natural_key": true},
+    {"schema_id": "primary_key_field", "is_primary_key": true},
+    {"schema_id": "line_item.nested_field", "alias": "flat_alias"}
+  ],
+  "unwind": "line_item",
+  "skip_record_insert": [
+    [{"schema_id": "field_id", "operator": "$eq", "value": ""}]
+  ],
+  "skip_automated_annotations": true
+}
+```
+
+**Key fields:**
+- `is_natural_key`: dedup key — the combination of all natural keys determines uniqueness
+- `is_primary_key`: if this value changes for the same natural key, the record is replaced
+- `unwind`: splits line items into individual records (one memorization record per line)
+- `skip_record_insert`: OR of AND condition groups — skip when any group fully matches
+- `skip_automated_annotations`: do not memorize corrections from fully automated annotations
+- Operators: `$eq`, `$ne`, `$gt`, `$gte`, `$lt`, `$lte`, `$in`, `$nin`
+
+---
+
+## Export Mapping (Jinja2)
+
+Export templates use Jinja2 syntax to structure extracted data for downstream systems.
+
+**Header fields**: `{{ field.schema_id }}`
+
+**Line items**: iterate with `{% for item in field.line_items %}` and access as `{{ item.schema_id }}`
+
+**Conditional logic:**
+```
+{% if field.po_payment_term_code_match != "" %}
+   "code": "{{ field.po_payment_term_code_match }}"
+{% elif field.sender_payment_terms_code_match != "" %}
+   "code": "{{ field.sender_payment_terms_code_match }}"
+{% else %}
+   "code": "{{ field.payment_terms_match }}"
+{% endif %}
+```
+
+**Common filters**: `| default(0, true)`, `| tojson`, `| upper`, `| lower`
+
+---
+
+## Document Sorting
+
+The document sorting extension routes documents to different queues based on field values. It watches a formula field (`document_sorting_target_queue`) and applies rules that map values to target queues:
+
+```json
+{
+  "value": "17",
+  "target_queue": 2582637,
+  "target_status": "importing",
+  "trigger_status": "to_review"
+}
+```
+
+- `value`: the formula field value that triggers this rule
+- `target_queue`: queue ID to move the document to
+- `target_status`: status in the target queue after move
+- `trigger_status`: the document must be in this status for the rule to fire

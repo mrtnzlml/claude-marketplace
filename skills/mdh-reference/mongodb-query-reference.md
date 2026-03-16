@@ -1,48 +1,6 @@
-# MongoDB Reference for Rossum Master Data Hub
+# MongoDB Query Reference for Rossum Master Data Hub
 
-This reference covers the MongoDB query language as it applies to Rossum's Master Data Hub matching engine. The Master Data Hub uses MongoDB-style queries to match extracted document data against uploaded reference datasets.
-
----
-
-## How Matching Works in Rossum
-
-The Master Data Hub executes matching queries against a MongoDB-backed dataset. Each matching configuration contains:
-
-1. **Dataset** — the reference data collection (vendors, POs, GL codes, etc.)
-2. **Queries** — one or more MongoDB queries executed sequentially; the first query that returns results wins
-3. **Mapping** — which dataset fields map to which schema fields on match
-4. **Result actions** — what happens on zero, one, or multiple matches
-5. **Default values** — fallback values when no match is found
-
-### Schema ID Placeholders
-
-In all queries, `{schema_id}` references the current value of a schema field from the annotation being processed. These are substituted at runtime before the query executes.
-
-```json
-{ "find": { "vendor_vat": "{sender_vat}" } }
-```
-
-Here `{sender_vat}` is replaced with the actual extracted VAT number before the query runs.
-
-> **Important**: The examples in this reference use generic placeholder names like `{sender_vat}`, `{sender_name}`, and dataset fields like `"Vendor Name"`, `"vat_number"`. When writing real queries, you **must use the actual schema IDs and dataset field names** from the customer's implementation. Discover these by:
->
-> 1. Reading the **schema JSON** to find real field `id` values (e.g., `invoice_id`, `vendor_name_normalized`, `po_line_number`)
-> 2. Reading the **dataset** structure to find real column names (e.g., `VE_NAME`, `VE_VAT_ID_NO`, `BP_STREET1`)
-> 3. Checking **existing matching configurations** for field naming conventions already in use
->
-> Never copy example field names verbatim — always substitute with the actual identifiers from the project.
-
-### Pipe Modifiers
-
-Placeholders support pipe modifiers for transforming values before substitution:
-
-- `{field | re}` or `{field | regex}` — escapes regex special characters so the value can be safely used inside `$regex`
-- `{field | split('delimiter')}` — splits the value by the given delimiter and uses the resulting array (e.g., `{order_id_normalized | split(',')}`)
-
-Example:
-```json
-{ "find": { "name": { "$regex": "^{sender_name | re}$", "$options": "i" } } }
-```
+MongoDB query syntax reference for building MDH matching configurations. For how matching works (cascade model, placeholders, pipe modifiers, result actions), see [mdh-api-reference.md](mdh-api-reference.md) and [mdh-matching-queries.md](mdh-matching-queries.md). This file covers the MongoDB operators, stages, and patterns available in queries.
 
 ---
 
@@ -1236,44 +1194,6 @@ Useful for diagnostics:
   ]
 }
 ```
-
----
-
-## Cross-Configuration Matching
-
-In Rossum's Master Data Hub, multiple matching configurations execute in order. Values matched by earlier configurations become available as `{schema_id}` placeholders in later ones.
-
-**Example flow:**
-1. **Config 1 — Vendor Match**: Matches vendor by VAT, fills `vendor_id` field
-2. **Config 2 — PO Match**: Uses `{vendor_id}` (now populated from Config 1) together with `{order_id}` to match purchase orders
-
-```json
-{
-  "find": {
-    "vendor_id": "{vendor_id}",
-    "po_number": "{order_id}"
-  }
-}
-```
-
-This chaining enables multi-step validation workflows where each match enriches the annotation with data used by subsequent matches.
-
----
-
-## Result Actions
-
-After a query executes, the result count triggers different actions:
-
-| Condition | Typical Actions |
-|-----------|----------------|
-| **Zero matches** | Show error/warning, set default value, block automation |
-| **One match** | Auto-fill mapped fields, show info message |
-| **Multiple matches** | Show as enum dropdown for manual selection, show warning |
-
-Message severity levels:
-- **error** — blocks automation, requires manual review
-- **warning** — does not block automation, informational
-- **info** — non-blocking notification
 
 ---
 
