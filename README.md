@@ -24,9 +24,13 @@ Upgrades deprecated Rossum extensions to modern equivalents. Currently covers va
 
 A comprehensive Rossum.ai platform reference (API, TxScript, Aurora AI, Master Data Hub, extensions, etc.) that Claude loads automatically when relevant. Not invocable as a slash command.
 
+### MongoDB Reference (auto-loaded)
+
+MongoDB query language reference for use across Rossum. Covers find operators, regex patterns, aggregation pipeline stages, expression operators, Atlas Search (`$search` with fuzzy, compound, dynamic thresholds, embedded documents), `$lookup`, `$unionWith`, `$function`, 14 practical matching patterns, data type handling, performance tips, and debugging. Auto-loaded when relevant.
+
 ### Master Data Hub (MDH) Reference (auto-loaded)
 
-Complete MDH reference combining the MDH API, matching query design, and MongoDB query syntax. Covers dataset management (upload, replace, delete), the hook configuration model (MatchConfig, mapping, result actions, query cascades), query design rules (DO/DON'T), score normalization, `$setWindowFields` unique-result patterns, GL coding dropdown pre-selection, Atlas Search index recommendations, detailed real-world examples, MongoDB find/aggregate operators, `$search` with fuzzy/compound/dynamic thresholds, `$lookup`, `$unionWith`, `$function`, performance tips, and debugging. Auto-loaded when relevant.
+MDH API reference and matching query design guide. Covers dataset management (upload, replace, delete), the hook configuration model (MatchConfig, mapping, result actions, query cascades), query design rules (DO/DON'T), score normalization, `$setWindowFields` unique-result patterns, GL coding dropdown pre-selection, Atlas Search index recommendations, and detailed real-world examples (supplier matching, PO line items, delivery address resolution). Auto-loaded when relevant.
 
 ### Data Storage API Reference (auto-loaded)
 
