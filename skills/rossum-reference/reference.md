@@ -1455,6 +1455,23 @@ Common JSON templates for adding fields to Rossum schemas.
 }
 ```
 
+### CRITICAL: All MDH-Populated Fields Must Be Enum
+
+**Every field populated by MDH — both `mapping.target_schema_id` and all `additional_mappings[].target_schema_id` targets — MUST use `"type": "enum"`, never `"type": "string"`.** MDH writes option lists and selected values into enum fields; a string field silently drops the value.
+
+This includes read-only derived fields (e.g., supplier number, site code, commodity name from additional mappings). Use `"edit": "enabled"` for the primary matched field and `"edit": "disabled"` for derived fields:
+
+```json
+{
+  "type": "enum",
+  "options": [],
+  "enum_value_type": "string",
+  "score_threshold": 0,
+  "disable_prediction": true,
+  "ui_configuration": {"type": "data", "edit": "disabled"}
+}
+```
+
 ### Formula Field
 
 ```json
