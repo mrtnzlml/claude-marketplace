@@ -4,19 +4,19 @@ A [Claude Code plugin marketplace](https://code.claude.com/docs/en/plugin-market
 
 ## Skills
 
-### `/rossum-sa-plugin:write-sow`
+### `/rossum-sa:write-sow`
 
 Generates a Statement of Work document from project requirements. Uses Rossum terminology, future tense ("Rossum will ..."), and defined terms from the legal contract (Cloud Based Technology, Dedicated Engine, Queue, Schema, etc.).
 
-### `/rossum-sa-plugin:analyze [path]`
+### `/rossum-sa:analyze [path]`
 
 Analyzes a Rossum implementation for common configuration errors and issues. Discovers the full implementation first, then checks for known problems in schemas, automation, extensions, formulas, rules, and deployment. Produces an issue report with severity levels and fix guidance.
 
-### `/rossum-sa-plugin:document [path]`
+### `/rossum-sa:document [path]`
 
 Analyzes a locally downloaded Rossum implementation and produces a queue-focused reference document. Describes every queue's purpose, document type, ingestion method, extension chain, formulas, rules, automation settings, and export destination — giving you a clear picture of what the implementation does at a glance.
 
-### `/rossum-sa-plugin:upgrade [path]`
+### `/rossum-sa:upgrade [path]`
 
 Upgrades deprecated Rossum extensions to modern equivalents. Finds old Copy & Paste, Find & Replace, Value Mapping, and Date Calculation extensions and produces replacement formula fields with migration steps.
 
@@ -91,13 +91,13 @@ A read-only MCP server for Rossum APIs. Starts automatically when the plugin is 
 ### Install the plugin
 
 ```bash
-/plugin install rossum-sa-plugin@mrtnzlml-claude-marketplace
+/plugin install rossum-sa@mrtnzlml-claude-marketplace
 ```
 
 ### Test locally
 
 ```bash
-claude --plugin-dir /path/to/claude-marketplace/plugins/rossum-sa-plugin
+claude --plugin-dir /path/to/claude-marketplace/plugins/rossum-sa
 ```
 
 ### Per-project (shared via git)
@@ -106,6 +106,6 @@ Add to `.claude/settings.json`:
 
 ```json
 {
-  "enabledPlugins": ["rossum-sa-plugin@mrtnzlml-claude-marketplace"]
+  "enabledPlugins": ["rossum-sa@mrtnzlml-claude-marketplace"]
 }
 ```
