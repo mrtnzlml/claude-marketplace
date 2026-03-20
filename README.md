@@ -1,6 +1,6 @@
-# Rossum Claude Code Plugin
+# Rossum Claude Code Plugin Marketplace
 
-A [Claude Code plugin](https://code.claude.com/docs/en/plugins) for Rossum.ai workflows. Provides skills for generating Statements of Work, analyzing and documenting customer implementations, upgrading deprecated extensions, and a comprehensive set of autoloaded platform references.
+A [Claude Code plugin marketplace](https://code.claude.com/docs/en/plugin-marketplaces) for Rossum.ai workflows. Provides skills for generating Statements of Work, analyzing and documenting customer implementations, upgrading deprecated extensions, and a comprehensive set of autoloaded platform references.
 
 ## Skills
 
@@ -82,18 +82,22 @@ A read-only MCP server for Rossum APIs. Starts automatically when the plugin is 
 
 ## Installation
 
+### Add the marketplace
+
+```bash
+/plugin marketplace add mrtnzlml/rossum-claude-plugin
+```
+
+### Install the plugin
+
+```bash
+/plugin install rossum@rossum-marketplace
+```
+
 ### Test locally
 
 ```bash
-claude --plugin-dir /path/to/rossum-claude-plugin
-```
-
-### Install from marketplace
-
-If added to a marketplace, team members can install with:
-
-```bash
-claude plugin install rossum@<marketplace-name>
+claude --plugin-dir /path/to/rossum-claude-plugin/plugins/rossum
 ```
 
 ### Per-project (shared via git)
@@ -102,6 +106,6 @@ Add to `.claude/settings.json`:
 
 ```json
 {
-  "enabledPlugins": ["rossum@<marketplace-name>"]
+  "enabledPlugins": ["rossum@rossum-marketplace"]
 }
 ```
