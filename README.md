@@ -91,7 +91,7 @@ A read-only MCP server for Rossum APIs. Starts automatically when the plugin is 
 ### Install the plugin
 
 ```bash
-/plugin install rossum@rossum-marketplace
+/plugin install rossum-sa-plugin@rossum-marketplace
 ```
 
 ### Test locally
@@ -106,6 +106,6 @@ Add to `.claude/settings.json`:
 
 ```json
 {
-  "enabledPlugins": ["rossum@rossum-marketplace"]
+  "enabledPlugins": ["rossum-sa-plugin@rossum-marketplace"]
 }
 ```
