@@ -85,7 +85,7 @@ A read-only MCP server for Rossum APIs. Starts automatically when the plugin is 
 ### Add the marketplace
 
 ```bash
-/plugin marketplace add mrtnzlml/rossum-claude-plugin
+/plugin marketplace add mrtnzlml/claude-marketplace
 ```
 
 ### Install the plugin
