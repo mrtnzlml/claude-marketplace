@@ -16,6 +16,10 @@ Analyzes a Rossum implementation for common configuration errors and issues. Dis
 
 Analyzes a locally downloaded Rossum implementation and produces a queue-focused reference document. Describes every queue's purpose, document type, ingestion method, extension chain, formulas, rules, automation settings, and export destination — giving you a clear picture of what the implementation does at a glance.
 
+### `/rossum:implement`
+
+Plans and executes a Rossum integration project end-to-end. Walks through 7 ordered phases: scoping, project setup, schema design, Master Data Hub configuration, extensions & serverless functions, business rules, export pipeline, and deployment promotion. Adapts to project complexity — simple projects skip inapplicable phases. Includes safety gates that require explicit user confirmation before any remote write operation. Designed for both internal engineers and partners.
+
 ### `/rossum:upgrade [path]`
 
 Upgrades deprecated Rossum extensions to modern equivalents. Currently covers value transformations: finds old Copy & Paste, Find & Replace, and Value Mapping extensions and produces replacement formula fields with migration steps.
