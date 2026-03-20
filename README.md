@@ -1,6 +1,6 @@
 # Rossum Claude Code Plugin
 
-A [Claude Code plugin](https://code.claude.com/docs/en/plugins) for Rossum.ai workflows. Provides skills for generating Statements of Work, analyzing and documenting customer implementations, and a comprehensive Rossum platform reference that Claude can use automatically.
+A [Claude Code plugin](https://code.claude.com/docs/en/plugins) for Rossum.ai workflows. Provides skills for generating Statements of Work, analyzing and documenting customer implementations, upgrading deprecated extensions, and a comprehensive set of autoloaded platform references.
 
 ## Skills
 
@@ -18,35 +18,39 @@ Analyzes a locally downloaded Rossum implementation and produces a queue-focused
 
 ### `/rossum:upgrade [path]`
 
-Upgrades deprecated Rossum extensions to modern equivalents. Currently covers value transformations: finds old Copy & Paste, Find & Replace, and Value Mapping extensions and produces replacement formula fields with migration steps.
+Upgrades deprecated Rossum extensions to modern equivalents. Finds old Copy & Paste, Find & Replace, and Value Mapping extensions and produces replacement formula fields with migration steps.
 
-### Rossum Reference (auto-loaded)
+## Autoloaded References
 
-A comprehensive Rossum.ai platform reference (API, TxScript, Aurora AI, Master Data Hub, extensions, etc.) that Claude loads automatically when relevant. Not invocable as a slash command.
+These references are loaded automatically by Claude when relevant to your conversation. They are not invocable as slash commands.
 
-### MongoDB Reference (auto-loaded)
+### Rossum Reference
 
-MongoDB query language reference for use across Rossum. Covers find operators, regex patterns, aggregation pipeline stages, expression operators, Atlas Search (`$search` with fuzzy, compound, dynamic thresholds, embedded documents), `$lookup`, `$unionWith`, `$function`, 14 practical matching patterns, data type handling, performance tips, and debugging. Auto-loaded when relevant.
+Complete Rossum.ai platform reference including API, architecture, concepts, schemas, extensions, and workflows.
 
-### Master Data Hub (MDH) Reference (auto-loaded)
+### MongoDB Reference
 
-MDH API reference and matching query design guide. Covers dataset management (upload, replace, delete), the hook configuration model (MatchConfig, mapping, result actions, query cascades), query design rules (DO/DON'T), score normalization, `$setWindowFields` unique-result patterns, GL coding dropdown pre-selection, Atlas Search index recommendations, and detailed real-world examples (supplier matching, PO line items, delivery address resolution). Auto-loaded when relevant.
+MongoDB query language reference tailored for Rossum. Covers find operators, regex patterns, aggregation pipeline stages, expression operators, Atlas Search (`$search` with fuzzy, compound, dynamic thresholds, embedded documents), `$lookup`, `$unionWith`, `$function`, practical matching patterns, data type handling, and debugging.
 
-### Data Storage API Reference (auto-loaded)
+### Master Data Hub (MDH) Reference
 
-Rossum's Data Storage REST API reference — a MongoDB-compatible data layer. Covers collection management, CRUD operations (insert, update, delete, replace, find), aggregation pipelines, bulk write, index management, and Atlas Search indexes. Includes async operation patterns and response schemas. Auto-loaded when relevant.
+MDH API reference and matching query design guide. Covers dataset management (upload, replace, delete), the hook configuration model (MatchConfig, mapping, result actions, query cascades), query design rules (DO/DON'T), score normalization, `$setWindowFields` unique-result patterns, GL coding dropdown pre-selection, Atlas Search index recommendations, and detailed real-world examples (supplier matching, PO line items, delivery address resolution).
 
-### TxScript & Serverless Functions Reference (auto-loaded)
+### Data Storage API Reference
 
-Practical guide for writing Rossum serverless functions using the TxScript Python 3.12 API. Covers the `TxScript` class pattern (`TxScript.from_payload()`), field access, utility functions, user messages, automation blockers, validation recipes (face value checks, required fields, date ranges), and common schema field conventions. Auto-loaded when relevant.
+Rossum's Data Storage REST API reference — a MongoDB-compatible data layer. Covers collection management, CRUD operations (insert, update, delete, replace, find), aggregation pipelines, bulk write, index management, and Atlas Search indexes. Includes async operation patterns and response schemas.
 
-### SAP Integration Reference (auto-loaded)
+### TxScript & Serverless Functions Reference
 
-SAP integration guide covering the SAP product landscape (S4 HANA Public/Private Cloud, ECC 6, Ariba, VIM, CIM, BTP), master data exchange challenges, IDOC generation patterns (INVOIC02, ORDERS05), middleware requirements, AP/AR terminology, and real customer implementation examples. Auto-loaded when relevant.
+Practical guide for writing Rossum serverless functions using the TxScript Python 3.12 API. Covers the `TxScript` class pattern (`TxScript.from_payload()`), field access, utility functions, user messages, automation blockers, validation recipes (face value checks, required fields, date ranges), and common schema field conventions.
 
-### prd2 Reference (auto-loaded)
+### SAP Integration Reference
 
-A reference for the prd2 CLI tool used to manage Rossum configurations across environments. Covers pull, push, deploy, purge, and hook commands, deploy files, attribute overrides, credentials, and project structure. Auto-loaded when relevant.
+SAP integration guide covering the SAP product landscape (S4 HANA Public/Private Cloud, ECC 6, Ariba, VIM, CIM, BTP), master data exchange challenges, IDOC generation patterns (INVOIC02, ORDERS05), middleware requirements, AP/AR terminology, and real customer implementation examples.
+
+### prd2 Reference
+
+A reference for the prd2 CLI tool used to manage Rossum configurations across environments. Covers pull, push, deploy, purge, and hook commands, deploy files, attribute overrides, credentials, and project structure.
 
 ## MCP Servers
 
