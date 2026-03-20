@@ -18,7 +18,7 @@ Analyzes a locally downloaded Rossum implementation and produces a queue-focused
 
 ### `/rossum:upgrade [path]`
 
-Upgrades deprecated Rossum extensions to modern equivalents. Finds old Copy & Paste, Find & Replace, and Value Mapping extensions and produces replacement formula fields with migration steps.
+Upgrades deprecated Rossum extensions to modern equivalents. Finds old Copy & Paste, Find & Replace, Value Mapping, and Date Calculation extensions and produces replacement formula fields with migration steps.
 
 ## Autoloaded References
 
