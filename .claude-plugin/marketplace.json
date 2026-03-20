@@ -8,8 +8,8 @@
   },
   "plugins": [
     {
-      "name": "rossum",
-      "source": "./plugins/rossum",
+      "name": "rossum-sa-plugin",
+      "source": "./plugins/rossum-sa-plugin",
       "description": "Claude Code plugin for Rossum.ai workflows — skills, references, and MCP tools for Rossum implementations"
     }
   ]
