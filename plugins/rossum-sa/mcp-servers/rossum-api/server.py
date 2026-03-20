@@ -476,6 +476,33 @@ def handle_list_audit_logs(request_id, arguments):
 
 
 @_tool(
+    "rossum_get_hook_secret_keys",
+    "Retrieves the list of secret key names configured on a hook. "
+    "Only key names are returned — values are encrypted and cannot be retrieved via the API.",
+    {
+        "type": "object",
+        "required": ["hook_id"],
+        "properties": {
+            "hook_id": {
+                "type": "integer",
+                "description": "The hook ID.",
+            },
+        },
+        "additionalProperties": False,
+    },
+)
+def handle_get_hook_secret_keys(request_id, arguments):
+    base_url, _ = _ensure_connection(request_id)
+    if not base_url:
+        return
+    hook_id = arguments["hook_id"]
+    url = f"{base_url}/api/v1/hooks/{hook_id}/secrets_keys"
+    result = _http_request(request_id, url)
+    if result is not None:
+        tool_result(request_id, json.dumps(result, indent=2))
+
+
+@_tool(
     "rossum_get_annotation_content",
     "Retrieves the extracted data (content) of a single annotation. "
     "Returns the annotation's data tree: sections containing datapoints and multivalues (tables).",

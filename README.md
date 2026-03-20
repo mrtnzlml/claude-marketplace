@@ -1,56 +1,60 @@
-# Rossum Claude Code Plugin
+# Rossum Claude Code Plugin Marketplace
 
-A [Claude Code plugin](https://code.claude.com/docs/en/plugins) for Rossum.ai workflows. Provides skills for generating Statements of Work, analyzing and documenting customer implementations, and a comprehensive Rossum platform reference that Claude can use automatically.
+A [Claude Code plugin marketplace](https://code.claude.com/docs/en/plugin-marketplaces) for Rossum.ai workflows. Provides skills for generating Statements of Work, analyzing and documenting customer implementations, upgrading deprecated extensions, and a comprehensive set of autoloaded platform references.
 
 ## Skills
 
-### `/rossum:write-sow`
+### `/rossum-sa:write-sow`
 
 Generates a Statement of Work document from project requirements. Uses Rossum terminology, future tense ("Rossum will ..."), and defined terms from the legal contract (Cloud Based Technology, Dedicated Engine, Queue, Schema, etc.).
 
-### `/rossum:analyze [path]`
+### `/rossum-sa:analyze [path]`
 
 Analyzes a Rossum implementation for common configuration errors and issues. Discovers the full implementation first, then checks for known problems in schemas, automation, extensions, formulas, rules, and deployment. Produces an issue report with severity levels and fix guidance.
 
-### `/rossum:document [path]`
+### `/rossum-sa:document [path]`
 
 Analyzes a locally downloaded Rossum implementation and produces a queue-focused reference document. Describes every queue's purpose, document type, ingestion method, extension chain, formulas, rules, automation settings, and export destination — giving you a clear picture of what the implementation does at a glance.
 
-### `/rossum:implement`
+### `/rossum-sa:implement`
 
 Plans and executes a Rossum integration project end-to-end. Walks through 7 ordered phases: scoping, project setup, schema design, Master Data Hub configuration, extensions & serverless functions, business rules, export pipeline, and deployment promotion. Adapts to project complexity — simple projects skip inapplicable phases. Includes safety gates that require explicit user confirmation before any remote write operation. Designed for both internal engineers and partners.
 
-### `/rossum:upgrade [path]`
+### `/rossum-sa:upgrade [path]`
 
-Upgrades deprecated Rossum extensions to modern equivalents. Currently covers value transformations: finds old Copy & Paste, Find & Replace, and Value Mapping extensions and produces replacement formula fields with migration steps.
+Upgrades deprecated Rossum extensions to modern equivalents. Finds old Copy & Paste, Find & Replace, Value Mapping, and Date Calculation extensions and produces replacement formula fields with migration steps.
 
-### Rossum Reference (auto-loaded)
+## Autoloaded References
 
-A comprehensive Rossum.ai platform reference (API, TxScript, Aurora AI, Master Data Hub, extensions, etc.) that Claude loads automatically when relevant. Not invocable as a slash command.
+These references are loaded automatically by Claude when relevant to your conversation. They are not invocable as slash commands.
 
-### MongoDB Reference (auto-loaded)
+### Rossum Reference
 
-MongoDB query language reference for use across Rossum. Covers find operators, regex patterns, aggregation pipeline stages, expression operators, Atlas Search (`$search` with fuzzy, compound, dynamic thresholds, embedded documents), `$lookup`, `$unionWith`, `$function`, 14 practical matching patterns, data type handling, performance tips, and debugging. Auto-loaded when relevant.
+Complete Rossum.ai platform reference including API, architecture, concepts, schemas, extensions, and workflows.
 
-### Master Data Hub (MDH) Reference (auto-loaded)
+### MongoDB Reference
 
-MDH API reference and matching query design guide. Covers dataset management (upload, replace, delete), the hook configuration model (MatchConfig, mapping, result actions, query cascades), query design rules (DO/DON'T), score normalization, `$setWindowFields` unique-result patterns, GL coding dropdown pre-selection, Atlas Search index recommendations, and detailed real-world examples (supplier matching, PO line items, delivery address resolution). Auto-loaded when relevant.
+MongoDB query language reference tailored for Rossum. Covers find operators, regex patterns, aggregation pipeline stages, expression operators, Atlas Search (`$search` with fuzzy, compound, dynamic thresholds, embedded documents), `$lookup`, `$unionWith`, `$function`, practical matching patterns, data type handling, and debugging.
 
-### Data Storage API Reference (auto-loaded)
+### Master Data Hub (MDH) Reference
 
-Rossum's Data Storage REST API reference — a MongoDB-compatible data layer. Covers collection management, CRUD operations (insert, update, delete, replace, find), aggregation pipelines, bulk write, index management, and Atlas Search indexes. Includes async operation patterns and response schemas. Auto-loaded when relevant.
+MDH API reference and matching query design guide. Covers dataset management (upload, replace, delete), the hook configuration model (MatchConfig, mapping, result actions, query cascades), query design rules (DO/DON'T), score normalization, `$setWindowFields` unique-result patterns, GL coding dropdown pre-selection, Atlas Search index recommendations, and detailed real-world examples (supplier matching, PO line items, delivery address resolution).
 
-### TxScript & Serverless Functions Reference (auto-loaded)
+### Data Storage API Reference
 
-Practical guide for writing Rossum serverless functions using the TxScript Python 3.12 API. Covers the `TxScript` class pattern (`TxScript.from_payload()`), field access, utility functions, user messages, automation blockers, validation recipes (face value checks, required fields, date ranges), and common schema field conventions. Auto-loaded when relevant.
+Rossum's Data Storage REST API reference — a MongoDB-compatible data layer. Covers collection management, CRUD operations (insert, update, delete, replace, find), aggregation pipelines, bulk write, index management, and Atlas Search indexes. Includes async operation patterns and response schemas.
 
-### SAP Integration Reference (auto-loaded)
+### TxScript & Serverless Functions Reference
 
-SAP integration guide covering the SAP product landscape (S4 HANA Public/Private Cloud, ECC 6, Ariba, VIM, CIM, BTP), master data exchange challenges, IDOC generation patterns (INVOIC02, ORDERS05), middleware requirements, AP/AR terminology, and real customer implementation examples. Auto-loaded when relevant.
+Practical guide for writing Rossum serverless functions using the TxScript Python 3.12 API. Covers the `TxScript` class pattern (`TxScript.from_payload()`), field access, utility functions, user messages, automation blockers, validation recipes (face value checks, required fields, date ranges), and common schema field conventions.
 
-### prd2 Reference (auto-loaded)
+### SAP Integration Reference
 
-A reference for the prd2 CLI tool used to manage Rossum configurations across environments. Covers pull, push, deploy, purge, and hook commands, deploy files, attribute overrides, credentials, and project structure. Auto-loaded when relevant.
+SAP integration guide covering the SAP product landscape (S4 HANA Public/Private Cloud, ECC 6, Ariba, VIM, CIM, BTP), master data exchange challenges, IDOC generation patterns (INVOIC02, ORDERS05), middleware requirements, AP/AR terminology, and real customer implementation examples.
+
+### prd2 Reference
+
+A reference for the prd2 CLI tool used to manage Rossum configurations across environments. Covers pull, push, deploy, purge, and hook commands, deploy files, attribute overrides, credentials, and project structure.
 
 ## MCP Servers
 
@@ -77,22 +81,27 @@ A read-only MCP server for Rossum APIs. Starts automatically when the plugin is 
 | `rossum_set_token` | Set the API connection. Requires `token` and `baseUrl`. |
 | `rossum_list_users` | List all users in the organization. Auto-paginates. Optional `is_active` filter. |
 | `rossum_list_audit_logs` | List audit log entries. Requires `object_type` (`document`, `annotation`, `user`), optional `action` filter. Admin-only, 1-year retention. Auto-paginates up to `max_results` (default 100, max 1000). |
+| `rossum_get_hook_secret_keys` | Retrieve the list of secret key names configured on a hook by hook ID. Only key names are returned — values are encrypted and not retrievable. |
 | `rossum_get_annotation_content` | Retrieve the extracted data (content) of a single annotation by ID. Returns the data tree: sections, datapoints, and multivalues. |
 
 ## Installation
 
+### Add the marketplace
+
+```bash
+/plugin marketplace add mrtnzlml/claude-marketplace
+```
+
+### Install the plugin
+
+```bash
+/plugin install rossum-sa@mrtnzlml-claude-marketplace
+```
+
 ### Test locally
 
 ```bash
-claude --plugin-dir /path/to/rossum-claude-plugin
-```
-
-### Install from marketplace
-
-If added to a marketplace, team members can install with:
-
-```bash
-claude plugin install rossum@<marketplace-name>
+claude --plugin-dir /path/to/claude-marketplace/plugins/rossum-sa
 ```
 
 ### Per-project (shared via git)
@@ -101,6 +110,6 @@ Add to `.claude/settings.json`:
 
 ```json
 {
-  "enabledPlugins": ["rossum@<marketplace-name>"]
+  "enabledPlugins": ["rossum-sa@mrtnzlml-claude-marketplace"]
 }
 ```

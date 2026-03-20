@@ -1,0 +1,16 @@
+{
+  "name": "mrtnzlml-claude-marketplace",
+  "owner": {
+    "name": "mrtnzlml"
+  },
+  "metadata": {
+    "description": "Claude Code plugins for Rossum.ai workflows"
+  },
+  "plugins": [
+    {
+      "name": "rossum-sa",
+      "source": "./plugins/rossum-sa",
+      "description": "Claude Code plugin for Rossum.ai workflows — skills, references, and MCP tools for Rossum implementations"
+    }
+  ]
+}

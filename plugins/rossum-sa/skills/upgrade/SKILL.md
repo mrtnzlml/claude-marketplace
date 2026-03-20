@@ -1,6 +1,6 @@
 ---
 name: upgrade
-description: Upgrade deprecated Rossum extensions to modern equivalents. Finds old Copy & Paste, Find & Replace, and Value Mapping extensions and produces replacement formula fields with migration steps. Use when modernizing a customer implementation. Triggers on requests like "upgrade extensions", "migrate to formulas", "replace deprecated hooks", "modernize this setup".
+description: Upgrade deprecated Rossum extensions to modern equivalents. Finds old Copy & Paste, Find & Replace, Value Mapping, and Date Calculation extensions and produces replacement formula fields with migration steps. Use when modernizing a customer implementation. Triggers on requests like "upgrade extensions", "migrate to formulas", "replace deprecated hooks", "modernize this setup".
 argument-hint: [path-to-implementation]
 allowed-tools: Read, Grep, Glob, Bash, Agent
 context: fork
@@ -14,22 +14,23 @@ You are a Rossum.ai Solution Architect upgrading a customer's implementation fro
 
 ## Scope
 
-This upgrade covers **value transformations** — extensions that copy, transform, or map field values:
+This upgrade covers **value transformations and date calculations** — extensions that copy, transform, map field values, or compute dates:
 
 | Deprecated Extension | Replacement | Why |
 |---------------------|-------------|-----|
 | Copy & Paste Values | Formula field | Extension is deprecated and no longer maintained |
 | Find & Replace Values | Formula field | Extension is deprecated and no longer maintained |
 | Value Mapping | Formula field | Formula fields are simpler, faster, and version-controlled |
+| Date Calculation | Formula field | Extension is deprecated and no longer maintained |
 
-## Phase 1: Find Value Transformation Extensions
+## Phase 1: Find Deprecated Extensions
 
 Use the provided path (or current directory if none given). Refer to `skills/__shared/discovery-checklist.md` for glob patterns.
 
 1. Find all hook JSON files: `**/hooks/*.json`
-2. Identify value transformation extensions by **grepping hook files** for these patterns:
-   - Names containing: `Copy`, `Paste`, `Find`, `Replace`, `Value Mapping`, `Mapping`
-   - Hook URLs containing: `copy-paste`, `find-replace`, `value-mapping`
+2. Identify deprecated extensions by **grepping hook files** for these patterns:
+   - Names containing: `Copy`, `Paste`, `Find`, `Replace`, `Value Mapping`, `Mapping`, `Date Calculation`, `Date Calc`
+   - Hook URLs containing: `copy-paste`, `find-replace`, `value-mapping`, `date-calculation`
 3. For each match, read the **full hook JSON** — especially `settings` (the transformation rules) and `queues` (which queues use it)
 4. Find the **schema** for each affected queue (`**/schema.json` in the matching queue directory) so you know what fields exist
 
@@ -50,6 +51,15 @@ Settings contain regex-based find-and-replace operations. Look for keys like `op
 ### Value Mapping
 
 Settings contain value-to-value mappings. Look for keys like `mappings`, `source`, `target`, `mapping`/`values`, `default`. Each mapping translates discrete values in one field to corresponding values in another field.
+
+### Date Calculation
+
+Settings contain a `calculations` array. Each calculation has:
+- `expression`: a string like `{date_issue} + timedelta(days=30)` where `{field_id}` references schema fields and `timedelta(days=N)` adds/subtracts time. The `timedelta` parameter can be a literal integer or a schema field reference (e.g., `timedelta(days={terms})`).
+- `target_field`: the schema field ID to write the computed date to.
+- `condition` (optional): a string expression that gates the calculation (e.g., `{sender_name} == 'Milk Company'`).
+
+All fields referenced in expressions (except `timedelta` parameters) must be of type `date` in the schema. Calculations are evaluated in order — later entries can override earlier ones for the same `target_field` (useful for conditional overrides).
 
 ## Phase 3: Produce Upgrade Report
 
@@ -145,6 +155,24 @@ re.sub(r'\s+', ' ', str(field.original_field)).strip()
     "INV": "Invoice",
     "CN": "Credit Note",
 }.get(field.document_type, "Other")
+```
+
+**Date Calculation → Formula:**
+```python
+from datetime import datetime, timedelta
+
+# Fixed offset: date_issue + 30 days
+datetime.strptime(field.date_issue, "%Y-%m-%d") + timedelta(days=30) if field.date_issue else None
+
+# Dynamic offset from another field (e.g., payment terms)
+datetime.strptime(field.date_issue, "%Y-%m-%d") + timedelta(days=int(field.terms)) if field.date_issue and field.terms else None
+
+# Conditional: different offset based on a field value
+(
+    datetime.strptime(field.date_issue, "%Y-%m-%d") + timedelta(days=14)
+    if field.sender_name == "Milk Company"
+    else datetime.strptime(field.date_issue, "%Y-%m-%d") + timedelta(days=30)
+) if field.date_issue else None
 ```
 
 ## Important
