@@ -77,6 +77,7 @@ A read-only MCP server for Rossum APIs. Starts automatically when the plugin is 
 | `rossum_set_token` | Set the API connection. Requires `token` and `baseUrl`. |
 | `rossum_list_users` | List all users in the organization. Auto-paginates. Optional `is_active` filter. |
 | `rossum_list_audit_logs` | List audit log entries. Requires `object_type` (`document`, `annotation`, `user`), optional `action` filter. Admin-only, 1-year retention. Auto-paginates up to `max_results` (default 100, max 1000). |
+| `rossum_get_hook_secret_keys` | Retrieve the list of secret key names configured on a hook by hook ID. Only key names are returned — values are encrypted and not retrievable. |
 | `rossum_get_annotation_content` | Retrieve the extracted data (content) of a single annotation by ID. Returns the data tree: sections, datapoints, and multivalues. |
 
 ## Installation
