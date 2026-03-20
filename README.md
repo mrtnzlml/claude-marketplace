@@ -97,7 +97,7 @@ A read-only MCP server for Rossum APIs. Starts automatically when the plugin is 
 ### Test locally
 
 ```bash
-claude --plugin-dir /path/to/rossum-claude-plugin/plugins/rossum
+claude --plugin-dir /path/to/claude-marketplace/plugins/rossum
 ```
 
 ### Per-project (shared via git)
