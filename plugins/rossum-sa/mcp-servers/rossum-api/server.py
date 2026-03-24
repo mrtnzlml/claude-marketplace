@@ -185,6 +185,29 @@ def _data_storage_call(request_id, path, body):
         tool_result(request_id, json.dumps(result, indent=2))
 
 
+def _rossum_get(request_id, path):
+    """GET a single Rossum API resource and return it as JSON."""
+    base_url, _ = _ensure_connection(request_id)
+    if not base_url:
+        return
+    result = _http_request(request_id, f"{base_url}{path}")
+    if result is not None:
+        tool_result(request_id, json.dumps(result, indent=2))
+
+
+def _rossum_list(request_id, endpoint, params, *, pick_fields=None, max_results=None):
+    """Paginate a Rossum API list endpoint and return collected results."""
+    base_url, _ = _ensure_connection(request_id)
+    if not base_url:
+        return
+    results = _paginate(
+        request_id, f"{base_url}{endpoint}?{urlencode(params)}",
+        max_results=max_results, pick_fields=pick_fields,
+    )
+    if results is not None:
+        tool_result(request_id, json.dumps({"total": len(results), "results": results}, indent=2))
+
+
 # --- Tool registration ---
 
 
@@ -483,16 +506,10 @@ _USER_FIELDS = ("id", "email", "first_name", "last_name", "is_active")
     annotations=_READ_ONLY,
 )
 def handle_list_users(request_id, arguments):
-    base_url, _ = _ensure_connection(request_id)
-    if not base_url:
-        return
     params = [("page_size", 100)]
     if "is_active" in arguments:
         params.append(("is_active", "true" if arguments["is_active"] else "false"))
-
-    results = _paginate(request_id, f"{base_url}/api/v1/users?{urlencode(params)}", pick_fields=_USER_FIELDS)
-    if results is not None:
-        tool_result(request_id, json.dumps({"total": len(results), "results": results}, indent=2))
+    _rossum_list(request_id, "/api/v1/users", params, pick_fields=_USER_FIELDS)
 
 
 @_tool(
@@ -527,19 +544,11 @@ def handle_list_users(request_id, arguments):
     annotations=_READ_ONLY,
 )
 def handle_list_audit_logs(request_id, arguments):
-    base_url, _ = _ensure_connection(request_id)
-    if not base_url:
-        return
-
     max_results = min(arguments.get("max_results", 100), 1000)
-    page_size = min(max_results, 100)
-    params = [("page_size", page_size), ("object_type", arguments["object_type"])]
+    params = [("page_size", min(max_results, 100)), ("object_type", arguments["object_type"])]
     if "action" in arguments:
         params.append(("action", arguments["action"]))
-
-    results = _paginate(request_id, f"{base_url}/api/v1/audit_logs?{urlencode(params)}", max_results=max_results)
-    if results is not None:
-        tool_result(request_id, json.dumps({"total": len(results), "results": results}, indent=2))
+    _rossum_list(request_id, "/api/v1/audit_logs", params, max_results=max_results)
 
 
 @_tool(
@@ -560,14 +569,7 @@ def handle_list_audit_logs(request_id, arguments):
     annotations=_READ_ONLY,
 )
 def handle_get_hook_secret_keys(request_id, arguments):
-    base_url, _ = _ensure_connection(request_id)
-    if not base_url:
-        return
-    hook_id = arguments["hook_id"]
-    url = f"{base_url}/api/v1/hooks/{hook_id}/secrets_keys"
-    result = _http_request(request_id, url)
-    if result is not None:
-        tool_result(request_id, json.dumps(result, indent=2))
+    _rossum_get(request_id, f"/api/v1/hooks/{arguments['hook_id']}/secrets_keys")
 
 
 @_tool(
@@ -588,14 +590,7 @@ def handle_get_hook_secret_keys(request_id, arguments):
     annotations=_READ_ONLY,
 )
 def handle_get_annotation_content(request_id, arguments):
-    base_url, _ = _ensure_connection(request_id)
-    if not base_url:
-        return
-    annotation_id = arguments["annotation_id"]
-    url = f"{base_url}/api/v1/annotations/{annotation_id}/content"
-    result = _http_request(request_id, url)
-    if result is not None:
-        tool_result(request_id, json.dumps(result, indent=2))
+    _rossum_get(request_id, f"/api/v1/annotations/{arguments['annotation_id']}/content")
 
 
 _QUEUE_FIELDS = ("id", "name", "workspace", "schema", "hooks", "status", "dedicated_engine")
@@ -622,18 +617,12 @@ _QUEUE_FIELDS = ("id", "name", "workspace", "schema", "hooks", "status", "dedica
     annotations=_READ_ONLY,
 )
 def handle_list_queues(request_id, arguments):
-    base_url, _ = _ensure_connection(request_id)
-    if not base_url:
-        return
     params = [("page_size", 100)]
     if "workspace" in arguments:
         params.append(("workspace", arguments["workspace"]))
     if "status" in arguments:
         params.append(("status", arguments["status"]))
-
-    results = _paginate(request_id, f"{base_url}/api/v1/queues?{urlencode(params)}", pick_fields=_QUEUE_FIELDS)
-    if results is not None:
-        tool_result(request_id, json.dumps({"total": len(results), "results": results}, indent=2))
+    _rossum_list(request_id, "/api/v1/queues", params, pick_fields=_QUEUE_FIELDS)
 
 
 _HOOK_FIELDS = ("id", "name", "type", "events", "queues", "active", "run_after", "token_owner")
@@ -660,18 +649,12 @@ _HOOK_FIELDS = ("id", "name", "type", "events", "queues", "active", "run_after",
     annotations=_READ_ONLY,
 )
 def handle_list_hooks(request_id, arguments):
-    base_url, _ = _ensure_connection(request_id)
-    if not base_url:
-        return
     params = [("page_size", 100)]
     if "queue" in arguments:
         params.append(("queue", arguments["queue"]))
     if "active" in arguments:
         params.append(("active", "true" if arguments["active"] else "false"))
-
-    results = _paginate(request_id, f"{base_url}/api/v1/hooks?{urlencode(params)}", pick_fields=_HOOK_FIELDS)
-    if results is not None:
-        tool_result(request_id, json.dumps({"total": len(results), "results": results}, indent=2))
+    _rossum_list(request_id, "/api/v1/hooks", params, pick_fields=_HOOK_FIELDS)
 
 
 @_tool(
@@ -692,13 +675,7 @@ def handle_list_hooks(request_id, arguments):
     annotations=_READ_ONLY,
 )
 def handle_get_schema(request_id, arguments):
-    base_url, _ = _ensure_connection(request_id)
-    if not base_url:
-        return
-    schema_id = arguments["schema_id"]
-    result = _http_request(request_id, f"{base_url}/api/v1/schemas/{schema_id}")
-    if result is not None:
-        tool_result(request_id, json.dumps(result, indent=2))
+    _rossum_get(request_id, f"/api/v1/schemas/{arguments['schema_id']}")
 
 
 # --- Main loop ---

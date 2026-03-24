@@ -1,0 +1,559 @@
+"""Tests for the Rossum API MCP server."""
+
+import io
+import json
+import sys
+import urllib.error
+from unittest import mock
+
+import pytest
+
+sys.path.insert(0, __import__("os").path.dirname(__file__))
+import server
+
+
+# --- Fixtures ---
+
+
+@pytest.fixture(autouse=True)
+def _reset_connection():
+    """Reset global connection state between tests."""
+    server._cached_base_url = None
+    server._cached_token = None
+    server._token_validated = False
+    yield
+    server._cached_base_url = None
+    server._cached_token = None
+    server._token_validated = False
+
+
+def _set_connected(base_url="https://example.rossum.ai", token="test-token"):
+    """Simulate an authenticated session."""
+    server._cached_base_url = base_url
+    server._cached_token = token
+    server._token_validated = True
+
+
+class MessageCapture:
+    """Capture JSON-RPC messages written to stdout."""
+
+    def __init__(self):
+        self.messages = []
+
+    def install(self, monkeypatch):
+        monkeypatch.setattr(server, "write_message", self.messages.append)
+        return self
+
+    @property
+    def last(self):
+        return self.messages[-1]
+
+    @property
+    def last_result(self):
+        return self.last.get("result", {})
+
+    @property
+    def last_text(self):
+        content = self.last_result.get("content", [{}])
+        return content[0].get("text", "") if content else ""
+
+    @property
+    def last_is_error(self):
+        return self.last_result.get("isError", False)
+
+
+@pytest.fixture
+def capture(monkeypatch):
+    return MessageCapture().install(monkeypatch)
+
+
+def _mock_urlopen(response_body, status=200):
+    """Create a mock for urllib.request.urlopen returning JSON."""
+    resp = mock.MagicMock()
+    resp.status = status
+    resp.read.return_value = json.dumps(response_body).encode("utf-8")
+    resp.__enter__ = mock.MagicMock(return_value=resp)
+    resp.__exit__ = mock.MagicMock(return_value=False)
+    return mock.patch("urllib.request.urlopen", return_value=resp)
+
+
+# --- URL validation ---
+
+
+class TestValidateBaseUrl:
+    def test_valid_https(self):
+        assert server._validate_base_url("https://elis.rossum.ai") == "https://elis.rossum.ai"
+
+    def test_valid_https_with_path(self):
+        assert server._validate_base_url("https://elis.rossum.ai/foo/bar") == "https://elis.rossum.ai"
+
+    def test_rejects_http(self):
+        assert server._validate_base_url("http://elis.rossum.ai") is None
+
+    def test_rejects_no_scheme(self):
+        assert server._validate_base_url("elis.rossum.ai") is None
+
+    def test_rejects_empty(self):
+        assert server._validate_base_url("") is None
+
+    def test_custom_port(self):
+        assert server._validate_base_url("https://localhost:8443") == "https://localhost:8443"
+
+    def test_default_port_stripped(self):
+        assert server._validate_base_url("https://elis.rossum.ai:443") == "https://elis.rossum.ai"
+
+
+# --- Tool registration ---
+
+
+class TestToolRegistration:
+    def test_all_tools_registered(self):
+        expected = {
+            "rossum_set_token",
+            "data_storage_healthz",
+            "data_storage_list_collections",
+            "data_storage_aggregate",
+            "data_storage_list_indexes",
+            "data_storage_list_search_indexes",
+            "data_storage_create_index",
+            "data_storage_create_search_index",
+            "rossum_list_users",
+            "rossum_list_audit_logs",
+            "rossum_get_hook_secret_keys",
+            "rossum_get_annotation_content",
+            "rossum_list_queues",
+            "rossum_list_hooks",
+            "rossum_get_schema",
+        }
+        assert set(server.TOOLS.keys()) == expected
+
+    def test_all_tools_have_handlers(self):
+        assert set(server.TOOLS.keys()) == set(server.HANDLERS.keys())
+
+    def test_read_only_annotations(self):
+        write_tools = {"data_storage_create_index", "data_storage_create_search_index"}
+        for name, tool_def in server.TOOLS.items():
+            ann = tool_def.get("annotations", {})
+            if name in write_tools:
+                assert ann.get("readOnlyHint") is False, f"{name} should be write"
+                assert ann.get("destructiveHint") is False, f"{name} should not be destructive"
+            else:
+                assert ann.get("readOnlyHint") is True, f"{name} should be read-only"
+
+    def test_tool_schemas_are_valid(self):
+        for name, tool_def in server.TOOLS.items():
+            schema = tool_def["inputSchema"]
+            assert schema["type"] == "object", f"{name} schema must be object"
+            assert "properties" in schema, f"{name} must have properties"
+
+
+# --- Connection state ---
+
+
+class TestConnectionState:
+    def test_ensure_connection_when_disconnected(self, capture):
+        base, token = server._ensure_connection("req-1")
+        assert base is None
+        assert token is None
+        assert capture.last_is_error
+
+    def test_ensure_connection_when_connected(self, capture):
+        _set_connected()
+        base, token = server._ensure_connection("req-1")
+        assert base == "https://example.rossum.ai"
+        assert token == "test-token"
+        assert len(capture.messages) == 0
+
+    def test_invalidate_connection(self):
+        _set_connected()
+        server._invalidate_connection()
+        assert server._cached_base_url is None
+        assert server._cached_token is None
+        assert server._token_validated is False
+
+
+# --- MCP protocol (integration) ---
+
+
+class TestMCPProtocol:
+    def test_initialize(self, capture):
+        server.respond("req-1", {
+            "protocolVersion": "2024-11-05",
+            "capabilities": {"tools": {}},
+            "serverInfo": {"name": "rossum-api", "version": "0.1.0"},
+        })
+        msg = capture.last
+        assert msg["jsonrpc"] == "2.0"
+        assert msg["result"]["serverInfo"]["name"] == "rossum-api"
+
+    def test_tools_list_returns_all(self, capture):
+        server.respond("req-1", {"tools": list(server.TOOLS.values())})
+        tools = capture.last_result["tools"]
+        assert len(tools) == 15
+
+    def test_unknown_tool(self, capture):
+        server.tool_result("req-1", "Unknown tool: fake_tool", is_error=True)
+        assert capture.last_is_error
+        assert "Unknown tool" in capture.last_text
+
+    def test_respond_error(self, capture):
+        server.respond_error("req-1", -32601, "Method not found")
+        assert capture.last["error"]["code"] == -32601
+
+
+# --- HTTP helpers ---
+
+
+class TestHttpRequest:
+    def test_returns_none_without_token(self):
+        result = server._http_request("req-1", "https://example.com/api")
+        assert result is None
+
+    def test_successful_request(self, capture):
+        _set_connected()
+        with _mock_urlopen({"ok": True}):
+            result = server._http_request("req-1", "https://example.rossum.ai/api/v1/test")
+        assert result == {"ok": True}
+
+    def test_401_invalidates_connection(self, capture):
+        _set_connected()
+        error = urllib.error.HTTPError(
+            "https://example.com", 401, "Unauthorized", {}, io.BytesIO(b"expired")
+        )
+        with mock.patch("urllib.request.urlopen", side_effect=error):
+            result = server._http_request("req-1", "https://example.rossum.ai/api")
+        assert result is None
+        assert server._token_validated is False
+        assert capture.last_is_error
+        assert "401" in capture.last_text
+
+    def test_other_http_error(self, capture):
+        _set_connected()
+        error = urllib.error.HTTPError(
+            "https://example.com", 500, "Server Error", {}, io.BytesIO(b"oops")
+        )
+        with mock.patch("urllib.request.urlopen", side_effect=error):
+            result = server._http_request("req-1", "https://example.rossum.ai/api")
+        assert result is None
+        assert capture.last_is_error
+        assert "500" in capture.last_text
+        # Connection should still be valid
+        assert server._token_validated is True
+
+    def test_generic_exception(self, capture):
+        _set_connected()
+        with mock.patch("urllib.request.urlopen", side_effect=ConnectionError("timeout")):
+            result = server._http_request("req-1", "https://example.rossum.ai/api")
+        assert result is None
+        assert capture.last_is_error
+
+
+# --- Pagination ---
+
+
+class TestPaginate:
+    def _mock_pages(self, pages):
+        """Mock _http_request to return successive pages."""
+        call_count = [0]
+        def fake_http(request_id, url, **kwargs):
+            if call_count[0] >= len(pages):
+                return None
+            page = pages[call_count[0]]
+            call_count[0] += 1
+            return page
+        return mock.patch.object(server, "_http_request", side_effect=fake_http)
+
+    def test_single_page(self):
+        _set_connected()
+        page = {"results": [{"id": 1}, {"id": 2}], "pagination": {"next": None}}
+        with self._mock_pages([page]):
+            results = server._paginate("req-1", "https://example.rossum.ai/api/v1/items?page_size=100")
+        assert results == [{"id": 1}, {"id": 2}]
+
+    def test_multiple_pages(self):
+        _set_connected()
+        pages = [
+            {"results": [{"id": 1}], "pagination": {"next": "https://example.rossum.ai/api/v1/items?page=2"}},
+            {"results": [{"id": 2}], "pagination": {"next": None}},
+        ]
+        with self._mock_pages(pages):
+            results = server._paginate("req-1", "https://example.rossum.ai/api/v1/items?page_size=100")
+        assert results == [{"id": 1}, {"id": 2}]
+
+    def test_max_results(self):
+        _set_connected()
+        page = {"results": [{"id": i} for i in range(10)], "pagination": {"next": "https://example.rossum.ai/next"}}
+        with self._mock_pages([page]):
+            results = server._paginate("req-1", "https://example.rossum.ai/api/v1/items", max_results=3)
+        assert len(results) == 3
+
+    def test_pick_fields(self):
+        _set_connected()
+        page = {"results": [{"id": 1, "name": "a", "secret": "x"}], "pagination": {"next": None}}
+        with self._mock_pages([page]):
+            results = server._paginate(
+                "req-1", "https://example.rossum.ai/api/v1/items",
+                pick_fields=("id", "name"),
+            )
+        assert results == [{"id": 1, "name": "a"}]
+
+    def test_cross_origin_pagination_blocked(self):
+        _set_connected()
+        pages = [
+            {"results": [{"id": 1}], "pagination": {"next": "https://evil.example.com/api/v1/items?page=2"}},
+        ]
+        with self._mock_pages(pages):
+            results = server._paginate("req-1", "https://example.rossum.ai/api/v1/items")
+        assert results == [{"id": 1}]
+
+    def test_http_error_returns_none(self):
+        _set_connected()
+        with self._mock_pages([None]):
+            results = server._paginate("req-1", "https://example.rossum.ai/api/v1/items")
+        assert results is None
+
+
+# --- Tool handlers ---
+
+
+class TestSetToken:
+    def test_missing_token(self, capture):
+        server.handle_set_token("req-1", {"baseUrl": "https://elis.rossum.ai"})
+        assert capture.last_is_error
+        assert "Missing" in capture.last_text
+
+    def test_invalid_url(self, capture):
+        server.handle_set_token("req-1", {"token": "tok", "baseUrl": "http://bad.com"})
+        assert capture.last_is_error
+        assert "Invalid base URL" in capture.last_text
+
+    def test_successful_connection(self, capture):
+        with mock.patch.object(server, "_probe_token", return_value=(True, None)):
+            server.handle_set_token("req-1", {"token": "tok", "baseUrl": "https://elis.rossum.ai"})
+        assert not capture.last_is_error
+        assert "Connected" in capture.last_text
+        assert server._token_validated is True
+
+    def test_probe_failure(self, capture):
+        with mock.patch.object(server, "_probe_token", return_value=(False, "HTTP 403: Forbidden")):
+            server.handle_set_token("req-1", {"token": "tok", "baseUrl": "https://elis.rossum.ai"})
+        assert capture.last_is_error
+        assert "Cannot connect" in capture.last_text
+        assert server._token_validated is False
+
+
+class TestHealthz:
+    def test_healthy(self, capture):
+        with mock.patch.object(server, "_check_health", return_value=True):
+            server.handle_healthz("req-1", {"baseUrl": "https://elis.rossum.ai"})
+        assert "healthy" in capture.last_text
+
+    def test_unreachable(self, capture):
+        with mock.patch.object(server, "_check_health", return_value=False):
+            server.handle_healthz("req-1", {"baseUrl": "https://elis.rossum.ai"})
+        assert capture.last_is_error
+        assert "not reachable" in capture.last_text
+
+    def test_invalid_url(self, capture):
+        server.handle_healthz("req-1", {"baseUrl": "http://bad"})
+        assert capture.last_is_error
+
+    def test_uses_connected_env(self, capture):
+        _set_connected("https://custom.rossum.app")
+        with mock.patch.object(server, "_check_health", return_value=True) as m:
+            server.handle_healthz("req-1", {})
+        m.assert_called_once_with("https://custom.rossum.app")
+        assert "connected environment" in capture.last_text
+
+    def test_defaults_to_elis(self, capture):
+        with mock.patch.object(server, "_check_health", return_value=True) as m:
+            server.handle_healthz("req-1", {})
+        m.assert_called_once_with("https://elis.rossum.ai")
+
+
+class TestDataStorageTools:
+    def test_list_collections_not_connected(self, capture):
+        server.handle_list_collections("req-1", {})
+        assert capture.last_is_error
+
+    def test_list_collections(self, capture):
+        _set_connected()
+        with _mock_urlopen({"collections": ["a", "b"]}):
+            server.handle_list_collections("req-1", {"nameOnly": True})
+        assert "collections" in capture.last_text
+
+    def test_aggregate(self, capture):
+        _set_connected()
+        with _mock_urlopen({"results": []}):
+            server.handle_aggregate("req-1", {"collectionName": "test", "pipeline": [{"$limit": 1}]})
+        assert not capture.last_is_error
+
+    def test_list_indexes(self, capture):
+        _set_connected()
+        with _mock_urlopen({"indexes": ["_id_"]}):
+            server.handle_list_indexes("req-1", {"collectionName": "test"})
+        assert not capture.last_is_error
+
+    def test_create_index(self, capture):
+        _set_connected()
+        with _mock_urlopen({"ok": True}):
+            server.handle_create_index("req-1", {"collectionName": "test", "keys": {"field": 1}})
+        assert not capture.last_is_error
+
+    def test_create_search_index(self, capture):
+        _set_connected()
+        with _mock_urlopen({"ok": True}):
+            server.handle_create_search_index("req-1", {
+                "collectionName": "test",
+                "definition": {"mappings": {"dynamic": True}},
+                "name": "my_index",
+            })
+        assert not capture.last_is_error
+
+
+class TestRossumApiTools:
+    def _mock_list_response(self, results, next_url=None):
+        return _mock_urlopen({"results": results, "pagination": {"next": next_url}})
+
+    def test_list_users(self, capture):
+        _set_connected()
+        users = [{"id": 1, "email": "a@b.com", "first_name": "A", "last_name": "B", "is_active": True}]
+        with self._mock_list_response(users):
+            server.handle_list_users("req-1", {})
+        data = json.loads(capture.last_text)
+        assert data["total"] == 1
+        assert data["results"][0]["email"] == "a@b.com"
+
+    def test_list_users_filter(self, capture):
+        _set_connected()
+        with self._mock_list_response([]) as m:
+            server.handle_list_users("req-1", {"is_active": True})
+        call_url = m.call_args[0][0].full_url
+        assert "is_active=true" in call_url
+
+    def test_list_audit_logs(self, capture):
+        _set_connected()
+        entries = [{"id": 1, "action": "create"}]
+        with self._mock_list_response(entries):
+            server.handle_list_audit_logs("req-1", {"object_type": "document"})
+        data = json.loads(capture.last_text)
+        assert data["total"] == 1
+
+    def test_list_audit_logs_max_results_capped(self, capture):
+        _set_connected()
+        with self._mock_list_response([{"id": i} for i in range(5)]):
+            server.handle_list_audit_logs("req-1", {"object_type": "user", "max_results": 2})
+        data = json.loads(capture.last_text)
+        assert data["total"] == 2
+
+    def test_get_hook_secret_keys(self, capture):
+        _set_connected()
+        with _mock_urlopen({"keys": ["SECRET_1"]}):
+            server.handle_get_hook_secret_keys("req-1", {"hook_id": 42})
+        assert "SECRET_1" in capture.last_text
+
+    def test_get_annotation_content(self, capture):
+        _set_connected()
+        with _mock_urlopen({"content": [{"category": "section_header"}]}):
+            server.handle_get_annotation_content("req-1", {"annotation_id": 99})
+        assert "section_header" in capture.last_text
+
+    def test_list_queues(self, capture):
+        _set_connected()
+        queues = [{"id": 10, "name": "Invoices", "workspace": "https://api/ws/1",
+                   "schema": "https://api/schemas/5", "hooks": [], "status": "active",
+                   "dedicated_engine": None, "extra_field": "ignored"}]
+        with self._mock_list_response(queues):
+            server.handle_list_queues("req-1", {})
+        data = json.loads(capture.last_text)
+        assert data["results"][0]["name"] == "Invoices"
+        assert "extra_field" not in data["results"][0]
+
+    def test_list_hooks(self, capture):
+        _set_connected()
+        hooks = [{"id": 5, "name": "Validator", "type": "function", "events": ["annotation_content"],
+                  "queues": [], "active": True, "run_after": [], "token_owner": "https://api/users/1"}]
+        with self._mock_list_response(hooks):
+            server.handle_list_hooks("req-1", {})
+        data = json.loads(capture.last_text)
+        assert data["results"][0]["name"] == "Validator"
+
+    def test_list_hooks_filter(self, capture):
+        _set_connected()
+        with self._mock_list_response([]) as m:
+            server.handle_list_hooks("req-1", {"queue": 10, "active": False})
+        call_url = m.call_args[0][0].full_url
+        assert "queue=10" in call_url
+        assert "active=false" in call_url
+
+    def test_get_schema(self, capture):
+        _set_connected()
+        with _mock_urlopen({"id": 5, "content": [{"category": "section"}]}):
+            server.handle_get_schema("req-1", {"schema_id": 5})
+        data = json.loads(capture.last_text)
+        assert data["id"] == 5
+
+    def test_tools_require_connection(self, capture):
+        """All authenticated tools should fail gracefully when not connected."""
+        authenticated_handlers = [
+            (server.handle_list_collections, {}),
+            (server.handle_aggregate, {"collectionName": "c", "pipeline": []}),
+            (server.handle_list_indexes, {"collectionName": "c"}),
+            (server.handle_list_search_indexes, {"collectionName": "c"}),
+            (server.handle_create_index, {"collectionName": "c", "keys": {"f": 1}}),
+            (server.handle_create_search_index, {"collectionName": "c", "definition": {}}),
+            (server.handle_list_users, {}),
+            (server.handle_list_audit_logs, {"object_type": "user"}),
+            (server.handle_get_hook_secret_keys, {"hook_id": 1}),
+            (server.handle_get_annotation_content, {"annotation_id": 1}),
+            (server.handle_list_queues, {}),
+            (server.handle_list_hooks, {}),
+            (server.handle_get_schema, {"schema_id": 1}),
+        ]
+        for handler, args in authenticated_handlers:
+            capture.messages.clear()
+            handler(f"req-{handler.__name__}", args)
+            assert capture.last_is_error, f"{handler.__name__} should fail when not connected"
+
+
+# --- Main loop integration ---
+
+
+class TestMainLoop:
+    def _run_messages(self, messages, monkeypatch):
+        """Feed JSON-RPC messages through the main loop and capture responses."""
+        input_lines = "".join(json.dumps(m) + "\n" for m in messages)
+        monkeypatch.setattr("sys.stdin", io.StringIO(input_lines))
+        output = io.StringIO()
+        monkeypatch.setattr("sys.stdout", output)
+        server.main()
+        return [json.loads(line) for line in output.getvalue().strip().split("\n") if line]
+
+    def test_initialize_and_ping(self, monkeypatch):
+        responses = self._run_messages([
+            {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}},
+            {"jsonrpc": "2.0", "id": 2, "method": "ping"},
+        ], monkeypatch)
+        assert responses[0]["result"]["serverInfo"]["name"] == "rossum-api"
+        assert responses[1]["result"] == {}
+
+    def test_tools_list(self, monkeypatch):
+        responses = self._run_messages([
+            {"jsonrpc": "2.0", "id": 1, "method": "tools/list"},
+        ], monkeypatch)
+        tool_names = {t["name"] for t in responses[0]["result"]["tools"]}
+        assert "rossum_set_token" in tool_names
+        assert "data_storage_create_index" in tool_names
+        assert len(tool_names) == 15
+
+    def test_call_unknown_tool(self, monkeypatch):
+        responses = self._run_messages([
+            {"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "nope"}},
+        ], monkeypatch)
+        assert responses[0]["result"]["isError"] is True
+
+    def test_unknown_method(self, monkeypatch):
+        responses = self._run_messages([
+            {"jsonrpc": "2.0", "id": 1, "method": "nonexistent"},
+        ], monkeypatch)
+        assert responses[0]["error"]["code"] == -32601
