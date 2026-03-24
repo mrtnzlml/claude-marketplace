@@ -1,12 +1,32 @@
-# Rossum Claude Code Plugin Marketplace
+# 🧰 Rossum toolkit for Claude Code
 
-A [Claude Code plugin marketplace](https://code.claude.com/docs/en/plugin-marketplaces) for Rossum.ai workflows.
+Turn Claude into a Rossum implementation partner — audit hooks, analyze schemas, query Data Storage, extract documents, and generate SOWs, all from your terminal.
 
-## Plugins
+6 skills · 7 reference packs · 32 MCP tools — [Claude Code plugin marketplace](https://code.claude.com/docs/en/plugin-marketplaces) for Rossum.ai.
+
+<!-- TODO: add a terminal demo GIF here (e.g. invoice extraction or hook audit) -->
+
+## 🚀 Quick start
+
+You need [Claude Code CLI](https://code.claude.com/) and a Rossum API token.
+
+```bash
+/plugin marketplace add mrtnzlml/claude-marketplace
+/plugin install rossum-sa@mrtnzlml-claude-marketplace
+```
+
+Then connect and go:
+
+```
+Connect to Rossum (token: <TOKEN>, base URL: https://elis.rossum.ai).
+Map out the entire org — workspaces, queues, hooks, schemas — and draw
+an ASCII architecture diagram. Add emoji health indicators next to each
+component (🟢 healthy, 🟡 warning, 🔴 broken).
+```
+
+## ⚡ Skills
 
 ### `rossum-sa`
-
-Skills, references, and MCP tools for Rossum implementations.
 
 | Skill | Description |
 |-------|-------------|
@@ -16,80 +36,58 @@ Skills, references, and MCP tools for Rossum implementations.
 | `/rossum-sa:implement` | Plan and execute an integration project end-to-end |
 | `/rossum-sa:upgrade [path]` | Upgrade deprecated extensions to modern formula fields |
 
-Autoloaded references: Rossum platform, MongoDB, Master Data Hub, Data Storage API, TxScript & Serverless Functions, SAP Integration, prd2 CLI.
-
-MCP server (`rossum-api`) — starts automatically when the plugin is enabled. Write tools require explicit user approval. See [MCP tools](#mcp-tools-rossum-api) below.
-
 ### `nerossum`
-
-Document processing without Rossum — a fun demo that replicates Rossum-like extraction behavior using only Claude. No Rossum account needed.
 
 | Skill | Description |
 |-------|-------------|
 | `/nerossum:document-processing` | Extract structured data from invoices, POs, and receipts with validation and anomaly detection |
 
-## Installation
+## 📚 Autoloaded references
 
-```bash
-# Add the marketplace
-/plugin marketplace add mrtnzlml/claude-marketplace
+When `rossum-sa` is enabled, Claude automatically gets domain knowledge for:
 
-# Install a plugin
-/plugin install rossum-sa@mrtnzlml-claude-marketplace
-/plugin install nerossum@mrtnzlml-claude-marketplace
-```
+- **Rossum platform** — queues, schemas, hooks, annotations, workflows
+- **MongoDB** — query syntax, aggregation pipelines
+- **Master Data Hub (MDH)** — matching, scoring, collections
+- **Data Storage API** — CRUD, indexing, search
+- **TxScript & Serverless Functions** — formula fields, extension development
+- **SAP Integration** — connector setup, mapping
+- **prd2 CLI** — deployment and management commands
 
-Test locally:
+## 💡 What can you do with this?
 
-```bash
-claude --plugin-dir /path/to/claude-marketplace/plugins/rossum-sa
-claude --plugin-dir /path/to/claude-marketplace/plugins/nerossum
-```
-
-Per-project (`.claude/settings.json`):
-
-```json
-{
-  "enabledPlugins": [
-    "rossum-sa@mrtnzlml-claude-marketplace",
-    "nerossum@mrtnzlml-claude-marketplace"
-  ]
-}
-```
-
-## Prompt examples
-
-Audit log analysis:
+**🕵️ Who's been busy?** — Pull a year of audit logs and surface suspicious activity patterns.
 ```
 Connect to Rossum (token: <TOKEN>, base URL: https://elis.rossum.ai), pull all audit logs
 for the last year, and print a histogram of user activity. Highlight suspicious patterns.
 ```
 
-Hook chain health check:
+**🔗 Find broken hooks** — Audit your hook chains across all queues.
 ```
 Connect to Rossum and list all hooks. Group them by queue and flag any that are inactive,
 have no queues attached, or have a broken run_after chain.
 ```
 
-Index audit:
+**📊 Spot missing indexes** — Catch Data Storage performance problems before they bite.
 ```
 Connect to Rossum and check all Data Storage collections. List their indexes and search
 indexes, flag any missing __dynamic_index or duplicate/redundant indexes.
 ```
 
-MDH score tuning:
+**🎯 Tune fuzzy matching** — Optimize MDH search scores with real data.
 ```
 Connect to Rossum and find the fuzzy match ($search) in the MDH extension. Run it against
 the MDH collections to fine-tune the __searchScore. Use at least 100 samples.
 ```
 
-Schema drift detection:
+**🔀 Detect schema drift** — Find fields that diverged across queues.
 ```
 Connect to Rossum and compare schemas across all active queues. List fields that exist in
 one schema but not another.
 ```
 
-MCP server self-test:
+<details>
+<summary><strong>🧪 MCP server self-test</strong> (for development/CI)</summary>
 
 ```
 Call rossum_set_token with the provided token and base URL, then systematically test every MCP tool
@@ -114,14 +112,23 @@ Token: <ROSSUM_API_TOKEN>
 Base URL: https://elis.rossum.ai
 ```
 
-## MCP tools (`rossum-api`)
+</details>
+
+## 🔌 MCP tools (`rossum-api`)
+
+The MCP server starts automatically when `rossum-sa` is enabled. Write and destructive tools require explicit user approval.
+
+#### Connection
 
 | Tool | Description |
 |------|-------------|
-| **Connection** | |
 | `rossum_set_token` | Authenticate with a Rossum environment |
 | `rossum_whoami` | Show authenticated user, organization, and role |
-| **Rossum API** | |
+
+#### Rossum API
+
+| Tool | Description |
+|------|-------------|
 | `rossum_list_workspaces` | List workspaces |
 | `rossum_get_workspace` | Get full workspace details |
 | `rossum_list_queues` | List queues (filter by workspace, status) |
@@ -130,8 +137,8 @@ Base URL: https://elis.rossum.ai
 | `rossum_list_schemas` | List all schemas |
 | `rossum_list_hooks` | List hooks/extensions (filter by queue, active) |
 | `rossum_get_hook` | Get full hook details including code and config |
-| `rossum_create_hook` | :pencil2: Create a new hook (serverless function or webhook) |
-| `rossum_delete_hook` | :warning: Delete a hook |
+| `rossum_create_hook` | ✏️ Create a new hook (serverless function or webhook) |
+| `rossum_delete_hook` | ⚠️ Delete a hook |
 | `rossum_get_hook_secret_keys` | List secret key names on a hook |
 | `rossum_list_annotations` | List annotations in a queue (filter by status) |
 | `rossum_get_annotation` | Get annotation metadata, messages, and state |
@@ -143,16 +150,20 @@ Base URL: https://elis.rossum.ai
 | `rossum_get_organization` | Get organization details and feature flags |
 | `rossum_list_users` | List organization users |
 | `rossum_list_audit_logs` | Query audit logs (admin only) |
-| **Data Storage** | |
+
+#### Data Storage
+
+| Tool | Description |
+|------|-------------|
 | `data_storage_healthz` | Check API reachability |
 | `data_storage_list_collections` | List collections |
 | `data_storage_find` | Query documents with filter/projection/sort |
 | `data_storage_aggregate` | Run MongoDB aggregation pipelines |
 | `data_storage_list_indexes` | List collection indexes |
 | `data_storage_list_search_indexes` | List Atlas Search indexes |
-| `data_storage_create_index` | :pencil2: Create a database index |
-| `data_storage_create_search_index` | :pencil2: Create an Atlas Search index |
-| `data_storage_drop_index` | :warning: Drop a database index |
-| `data_storage_drop_search_index` | :warning: Drop an Atlas Search index |
+| `data_storage_create_index` | ✏️ Create a database index |
+| `data_storage_create_search_index` | ✏️ Create an Atlas Search index |
+| `data_storage_drop_index` | ⚠️ Drop a database index |
+| `data_storage_drop_search_index` | ⚠️ Drop an Atlas Search index |
 
-:pencil2: = write (requires approval) · :warning: = destructive (requires approval)
+✏️ = write (requires approval) · ⚠️ = destructive (requires approval)
