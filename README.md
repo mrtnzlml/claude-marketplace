@@ -102,11 +102,11 @@ against the live API. For each tool:
 4. Record pass/fail for each tool.
 
 If a tool fails, diagnose whether the bug is in the server code (wrong field names, incorrect API path,
-bad request body shape) or a real API error. Fix server bugs in-place — update server.py, server_test.py,
-and README.md in the same pass. Run `pytest` after every fix.
+bad request body shape) or a real API error. Fix server bugs in-place — update server.py
+and README.md in the same pass.
 
 After all tools pass, evaluate coverage gaps: are there Rossum API endpoints that would be high-value
-additions for an SA debugging implementations? If so, add them (with tests and README updates).
+additions for an SA debugging implementations? If so, add them (with README updates).
 
 Token: <ROSSUM_API_TOKEN>
 Base URL: https://elis.rossum.ai

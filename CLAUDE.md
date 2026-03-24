@@ -14,5 +14,4 @@ This is a Claude Code plugin marketplace for Rossum.ai workflows. It follows the
 ## Rules
 
 - **README.md must always stay in sync with the project.** When adding, removing, or renaming skills or MCP tools, update README.md to reflect the change in the same commit.
-- **MCP server tests must always stay in sync with the implementation.** When adding, removing, or changing tools in `server.py`, update `server_test.py` in the same commit. Run `pytest plugins/rossum-sa/mcp-servers/rossum-api/server_test.py` to verify.
 - **New or modified MCP tools must be tested against the real API.** After implementing or updating a tool, call it via the MCP connection with valid arguments derived from live data (use IDs from list endpoints to feed into get endpoints, use existing collection names for Data Storage calls). For write/destructive tools, create a temporary resource, verify it exists, then clean it up. Do not consider a tool done until it passes a live call.
