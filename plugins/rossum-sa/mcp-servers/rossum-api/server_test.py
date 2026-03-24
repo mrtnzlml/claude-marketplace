@@ -142,6 +142,10 @@ class TestToolRegistration:
             "rossum_get_inbox",
             "rossum_list_connectors",
             "rossum_get_connector",
+            "rossum_list_emails",
+            "rossum_get_email",
+            "rossum_list_email_threads",
+            "rossum_get_email_thread",
         }
         assert set(server.TOOLS.keys()) == expected
 
@@ -783,6 +787,76 @@ class TestRossumApiTools:
         assert data["name"] == "SAP Export"
         assert "/connectors/3" in m.call_args[0][0].full_url
 
+    def test_list_emails(self, capture):
+        _set_connected()
+        emails = [{"id": 100, "queue": "https://api/queues/10", "inbox": "https://api/inboxes/5",
+                   "subject": "Invoice attached", "from": {"email": "sender@example.com"},
+                   "to": [{"email": "inbox@elis.rossum.ai"}], "cc": [], "bcc": [],
+                   "type": "incoming", "created_at": "2026-01-01T00:00:00Z",
+                   "documents": ["https://api/documents/1"], "annotations": ["https://api/annotations/1"],
+                   "parent": None, "children": [], "email_thread": "https://api/email_threads/50",
+                   "annotation_counts": {"annotations": 1}, "labels": [], "metadata": {},
+                   "body_text_plain": "ignored in list", "body_text_html": "ignored"}]
+        with self._mock_list_response(emails):
+            server.handle_list_emails("req-1", {})
+        data = json.loads(capture.last_text)
+        assert data["total"] == 1
+        assert data["results"][0]["subject"] == "Invoice attached"
+        assert "body_text_plain" not in data["results"][0]
+
+    def test_list_emails_filter(self, capture):
+        _set_connected()
+        with self._mock_list_response([]) as m:
+            server.handle_list_emails("req-1", {"queue": 10, "type": "incoming", "max_results": 5})
+        call_url = m.call_args[0][0].full_url
+        assert "queue=10" in call_url
+        assert "type=incoming" in call_url
+
+    def test_get_email(self, capture):
+        _set_connected()
+        email_data = {"id": 100, "subject": "Invoice attached",
+                      "body_text_plain": "See attached", "from": {"email": "sender@example.com"}}
+        with _mock_urlopen(email_data) as m:
+            server.handle_get_email("req-1", {"email_id": 100})
+        data = json.loads(capture.last_text)
+        assert data["subject"] == "Invoice attached"
+        assert data["body_text_plain"] == "See attached"
+        assert "/emails/100" in m.call_args[0][0].full_url
+
+    def test_list_email_threads(self, capture):
+        _set_connected()
+        threads = [{"id": 50, "queue": "https://api/queues/10",
+                    "root_email": "https://api/emails/100", "subject": "Invoice attached",
+                    "from": {"email": "sender@example.com"}, "has_replies": True,
+                    "has_new_replies": False, "created_at": "2026-01-01T00:00:00Z",
+                    "last_email_created_at": "2026-01-02T00:00:00Z",
+                    "annotation_counts": {"annotations": 2}, "labels": [],
+                    "organization": "https://api/orgs/1", "root_email_read": True}]
+        with self._mock_list_response(threads):
+            server.handle_list_email_threads("req-1", {})
+        data = json.loads(capture.last_text)
+        assert data["total"] == 1
+        assert data["results"][0]["subject"] == "Invoice attached"
+        assert data["results"][0]["has_replies"] is True
+        assert "organization" not in data["results"][0]
+
+    def test_list_email_threads_filter(self, capture):
+        _set_connected()
+        with self._mock_list_response([]) as m:
+            server.handle_list_email_threads("req-1", {"queue": 10, "max_results": 5})
+        call_url = m.call_args[0][0].full_url
+        assert "queue=10" in call_url
+
+    def test_get_email_thread(self, capture):
+        _set_connected()
+        thread_data = {"id": 50, "subject": "Invoice attached",
+                       "root_email": "https://api/emails/100", "has_replies": False}
+        with _mock_urlopen(thread_data) as m:
+            server.handle_get_email_thread("req-1", {"thread_id": 50})
+        data = json.loads(capture.last_text)
+        assert data["subject"] == "Invoice attached"
+        assert "/email_threads/50" in m.call_args[0][0].full_url
+
     def test_tools_require_connection(self, capture):
         """All authenticated tools should fail gracefully when not connected."""
         authenticated_handlers = [
@@ -817,6 +891,10 @@ class TestRossumApiTools:
             (server.handle_get_inbox, {"inbox_id": 1}),
             (server.handle_list_connectors, {}),
             (server.handle_get_connector, {"connector_id": 1}),
+            (server.handle_list_emails, {}),
+            (server.handle_get_email, {"email_id": 1}),
+            (server.handle_list_email_threads, {}),
+            (server.handle_get_email_thread, {"thread_id": 1}),
         ]
         for handler, args in authenticated_handlers:
             capture.messages.clear()

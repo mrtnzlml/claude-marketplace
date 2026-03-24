@@ -1222,6 +1222,131 @@ def handle_get_connector(request_id, arguments):
     _rossum_get(request_id, f"/api/v1/connectors/{arguments['connector_id']}")
 
 
+_EMAIL_FIELDS = (
+    "id", "queue", "inbox", "subject", "from", "to", "cc", "bcc",
+    "type", "created_at", "documents", "annotations", "parent", "children",
+    "email_thread", "annotation_counts", "labels", "metadata",
+)
+
+
+@_tool(
+    "rossum_list_emails",
+    "Lists emails associated with queues. Emails represent incoming messages (with document "
+    "attachments) and outgoing auto-replies. Use this to find email IDs for rossum_get_email.",
+    {
+        "type": "object",
+        "properties": {
+            "queue": {
+                "type": "integer",
+                "description": "Filter by queue ID.",
+            },
+            "type": {
+                "type": "string",
+                "description": "Filter by type: 'incoming' or 'outgoing'.",
+            },
+            "max_results": {
+                "type": "integer",
+                "description": "Maximum emails to return (default: 50, max: 500).",
+            },
+        },
+        "additionalProperties": False,
+    },
+    annotations=_READ_ONLY,
+)
+def handle_list_emails(request_id, arguments):
+    max_results = min(arguments.get("max_results", 50), 500)
+    params = [("page_size", min(max_results, 100))]
+    if "queue" in arguments:
+        params.append(("queue", arguments["queue"]))
+    if "type" in arguments:
+        params.append(("type", arguments["type"]))
+    _rossum_list(
+        request_id, "/api/v1/emails", params,
+        max_results=max_results, pick_fields=_EMAIL_FIELDS,
+    )
+
+
+@_tool(
+    "rossum_get_email",
+    "Retrieves full details of a single email including subject, sender, recipients, "
+    "plain text and HTML body, linked documents and annotations, and thread info. "
+    "Use rossum_list_emails first to find email IDs.",
+    {
+        "type": "object",
+        "required": ["email_id"],
+        "properties": {
+            "email_id": {
+                "type": "integer",
+                "description": "The email ID.",
+            },
+        },
+        "additionalProperties": False,
+    },
+    annotations=_READ_ONLY,
+)
+def handle_get_email(request_id, arguments):
+    _rossum_get(request_id, f"/api/v1/emails/{arguments['email_id']}")
+
+
+_EMAIL_THREAD_FIELDS = (
+    "id", "queue", "root_email", "subject", "from", "has_replies",
+    "has_new_replies", "created_at", "last_email_created_at",
+    "annotation_counts", "labels",
+)
+
+
+@_tool(
+    "rossum_list_email_threads",
+    "Lists email threads. Threads group related incoming and outgoing emails together. "
+    "Use this to get an overview of email conversations per queue.",
+    {
+        "type": "object",
+        "properties": {
+            "queue": {
+                "type": "integer",
+                "description": "Filter by queue ID.",
+            },
+            "max_results": {
+                "type": "integer",
+                "description": "Maximum threads to return (default: 50, max: 500).",
+            },
+        },
+        "additionalProperties": False,
+    },
+    annotations=_READ_ONLY,
+)
+def handle_list_email_threads(request_id, arguments):
+    max_results = min(arguments.get("max_results", 50), 500)
+    params = [("page_size", min(max_results, 100))]
+    if "queue" in arguments:
+        params.append(("queue", arguments["queue"]))
+    _rossum_list(
+        request_id, "/api/v1/email_threads", params,
+        max_results=max_results, pick_fields=_EMAIL_THREAD_FIELDS,
+    )
+
+
+@_tool(
+    "rossum_get_email_thread",
+    "Retrieves full details of a single email thread including root email, reply status, "
+    "annotation counts, and labels. Use rossum_list_email_threads first to find thread IDs.",
+    {
+        "type": "object",
+        "required": ["thread_id"],
+        "properties": {
+            "thread_id": {
+                "type": "integer",
+                "description": "The email thread ID.",
+            },
+        },
+        "additionalProperties": False,
+    },
+    annotations=_READ_ONLY,
+)
+def handle_get_email_thread(request_id, arguments):
+    _rossum_get(request_id, f"/api/v1/email_threads/{arguments['thread_id']}")
+
+
 # --- Main loop ---
 
 

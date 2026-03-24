@@ -2,7 +2,7 @@
 
 Turn Claude into a Rossum implementation partner — audit hooks, analyze schemas, query Data Storage, extract documents, and generate SOWs, all from your terminal.
 
-6 skills · 7 reference packs · 32 MCP tools — [Claude Code plugin marketplace](https://code.claude.com/docs/en/plugin-marketplaces) for Rossum.ai.
+6 skills · 7 reference packs · 36 MCP tools — [Claude Code plugin marketplace](https://code.claude.com/docs/en/plugin-marketplaces) for Rossum.ai.
 
 <!-- TODO: add a terminal demo GIF here (e.g. invoice extraction or hook audit) -->
 
@@ -147,6 +147,10 @@ The MCP server starts automatically when `rossum-sa` is enabled. Write and destr
 | `rossum_get_inbox` | Get inbox details (email address, config) |
 | `rossum_list_connectors` | List export connectors (filter by queue) |
 | `rossum_get_connector` | Get full connector details |
+| `rossum_list_emails` | List emails (filter by queue, type) |
+| `rossum_get_email` | Get full email details (subject, body, attachments) |
+| `rossum_list_email_threads` | List email threads (filter by queue) |
+| `rossum_get_email_thread` | Get email thread details (replies, annotations) |
 | `rossum_get_organization` | Get organization details and feature flags |
 | `rossum_list_users` | List organization users |
 | `rossum_list_audit_logs` | Query audit logs (admin only) |
