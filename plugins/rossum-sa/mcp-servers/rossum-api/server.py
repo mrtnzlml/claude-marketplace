@@ -658,7 +658,9 @@ def handle_list_users(request_id, arguments):
 
 @_tool(
     "rossum_list_audit_logs",
-    "List audit log entries. Requires admin or organization group admin role. "
+    "List audit log entries. Requires admin or organization group admin role AND the audit log "
+    "feature flag enabled on the organization. If this call returns HTTP 403, the feature is "
+    "likely disabled — check rossum_get_organization to verify feature flags. "
     "Logs are retained for 1 year. Returns up to max_results entries (default 100).",
     {
         "type": "object",

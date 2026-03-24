@@ -59,13 +59,37 @@ Per-project (`.claude/settings.json`):
 
 ## Prompt examples
 
-> *Take the fuzzy match (`$search`) present in the "MDH (PO/GRN positions, Entity, MoO)" extension and run it against the MDH collections to fine-tune the matching score (`__searchScore`). The goal is to return as accurate documents as possible while correctly filtering garbage out. Use at least 100 MDH samples.*
+Audit log analysis:
+```
+Connect to Rossum (token: <TOKEN>, base URL: https://elis.rossum.ai), pull all audit logs
+for the last year, and print a histogram of user activity. Highlight suspicious patterns.
+```
 
-> *Analyze all available audit logs for the last year and print a histogram of user activity. Highlight suspicious patterns.*
+Hook chain health check:
+```
+Connect to Rossum and list all hooks. Group them by queue and flag any that are inactive,
+have no queues attached, or have a broken run_after chain.
+```
 
-> *Are all indexes and search indexes set correctly on this project?*
+Index audit:
+```
+Connect to Rossum and check all Data Storage collections. List their indexes and search
+indexes, flag any missing __dynamic_index or duplicate/redundant indexes.
+```
 
-### MCP tool integration test
+MDH score tuning:
+```
+Connect to Rossum and find the fuzzy match ($search) in the MDH extension. Run it against
+the MDH collections to fine-tune the __searchScore. Use at least 100 samples.
+```
+
+Schema drift detection:
+```
+Connect to Rossum and compare schemas across all active queues. List fields that exist in
+one schema but not another.
+```
+
+MCP server self-test:
 
 ```
 Call rossum_set_token with the provided token and base URL, then systematically test every MCP tool
