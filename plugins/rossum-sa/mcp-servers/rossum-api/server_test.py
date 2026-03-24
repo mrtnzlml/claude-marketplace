@@ -132,6 +132,7 @@ class TestToolRegistration:
             "rossum_list_hooks",
             "rossum_get_hook",
             "rossum_create_hook",
+            "rossum_delete_hook",
             "rossum_get_schema",
             "rossum_list_schemas",
             "rossum_list_workspaces",
@@ -149,7 +150,7 @@ class TestToolRegistration:
 
     def test_annotations(self):
         write_tools = {"data_storage_create_index", "data_storage_create_search_index", "rossum_create_hook"}
-        destructive_tools = {"data_storage_drop_index", "data_storage_drop_search_index"}
+        destructive_tools = {"data_storage_drop_index", "data_storage_drop_search_index", "rossum_delete_hook"}
         for name, tool_def in server.TOOLS.items():
             ann = tool_def.get("annotations", {})
             if name in destructive_tools:
@@ -663,6 +664,29 @@ class TestRossumApiTools:
         body = json.loads(m.call_args[0][0].data)
         assert body["sideload"] == ["schemas"]
 
+    def test_delete_hook(self, capture):
+        _set_connected()
+        resp = mock.MagicMock()
+        resp.status = 204
+        resp.__enter__ = mock.MagicMock(return_value=resp)
+        resp.__exit__ = mock.MagicMock(return_value=False)
+        with mock.patch("urllib.request.urlopen", return_value=resp) as m:
+            server.handle_delete_hook("req-1", {"hook_id": 42})
+        assert not capture.last_is_error
+        assert "Deleted" in capture.last_text
+        assert "/hooks/42" in m.call_args[0][0].full_url
+        assert m.call_args[0][0].method == "DELETE"
+
+    def test_delete_hook_not_found(self, capture):
+        _set_connected()
+        error = urllib.error.HTTPError(
+            "https://example.com", 404, "Not Found", {}, io.BytesIO(b'{"detail":"Not found."}')
+        )
+        with mock.patch("urllib.request.urlopen", side_effect=error):
+            server.handle_delete_hook("req-1", {"hook_id": 999})
+        assert capture.last_is_error
+        assert "404" in capture.last_text
+
     def test_get_schema(self, capture):
         _set_connected()
         with _mock_urlopen({"id": 5, "content": [{"category": "section"}]}):
@@ -783,6 +807,7 @@ class TestRossumApiTools:
             (server.handle_list_hooks, {}),
             (server.handle_get_hook, {"hook_id": 1}),
             (server.handle_create_hook, {"name": "t", "type": "function", "events": [], "config": {}}),
+            (server.handle_delete_hook, {"hook_id": 1}),
             (server.handle_get_schema, {"schema_id": 1}),
             (server.handle_list_schemas, {}),
             (server.handle_list_workspaces, {}),
@@ -843,7 +868,7 @@ class TestMainLoop:
             assert ann["destructiveHint"] is False, f"{name} destructiveHint"
 
         # Destructive
-        for name in ("data_storage_drop_index", "data_storage_drop_search_index"):
+        for name in ("data_storage_drop_index", "data_storage_drop_search_index", "rossum_delete_hook"):
             ann = tools_by_name[name]["annotations"]
             assert ann["readOnlyHint"] is False, f"{name} readOnlyHint"
             assert ann["destructiveHint"] is True, f"{name} destructiveHint"

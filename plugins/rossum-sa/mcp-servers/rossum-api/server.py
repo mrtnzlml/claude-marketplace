@@ -205,6 +205,31 @@ def _rossum_post(request_id, path, body):
         tool_result(request_id, json.dumps(result, indent=2))
 
 
+def _rossum_delete(request_id, path):
+    """DELETE a Rossum API resource. Expects 204 No Content."""
+    base_url, _ = _ensure_connection(request_id)
+    if not base_url:
+        return
+    token = _cached_token
+    req = urllib.request.Request(
+        f"{base_url}{path}",
+        headers={"Authorization": f"Bearer {token}"},
+        method="DELETE",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=30, context=_ssl_context) as resp:
+            tool_result(request_id, f"Deleted successfully (HTTP {resp.status}).")
+    except urllib.error.HTTPError as e:
+        error_body = e.read().decode("utf-8") if e.fp else str(e)
+        if e.code == 401:
+            _invalidate_connection()
+            tool_result(request_id, f"Authentication failed (HTTP 401). Token may be expired.\n{error_body}", is_error=True)
+        else:
+            tool_result(request_id, f"HTTP {e.code}: {error_body}", is_error=True)
+    except Exception as e:
+        tool_result(request_id, f"Error: {e}", is_error=True)
+
+
 def _rossum_list(request_id, endpoint, params, *, pick_fields=None, max_results=None):
     """Paginate a Rossum API list endpoint and return collected results."""
     base_url, _ = _ensure_connection(request_id)
@@ -945,6 +970,27 @@ def handle_create_hook(request_id, arguments):
     if "token_owner" in arguments:
         body["token_owner"] = f"{base_url}/api/v1/users/{arguments['token_owner']}"
     _rossum_post(request_id, "/api/v1/hooks", body)
+
+
+@_tool(
+    "rossum_delete_hook",
+    "Deletes a hook (extension) from the Rossum organization. "
+    "This is a destructive operation that cannot be undone.",
+    {
+        "type": "object",
+        "required": ["hook_id"],
+        "properties": {
+            "hook_id": {
+                "type": "integer",
+                "description": "The hook ID to delete.",
+            },
+        },
+        "additionalProperties": False,
+    },
+    annotations=_DESTRUCTIVE,
+)
+def handle_delete_hook(request_id, arguments):
+    _rossum_delete(request_id, f"/api/v1/hooks/{arguments['hook_id']}")
 
 
 @_tool(

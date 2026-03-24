@@ -107,6 +107,7 @@ Base URL: https://elis.rossum.ai
 | `rossum_list_hooks` | List hooks/extensions (filter by queue, active) |
 | `rossum_get_hook` | Get full hook details including code and config |
 | `rossum_create_hook` | :pencil2: Create a new hook (serverless function or webhook) |
+| `rossum_delete_hook` | :warning: Delete a hook |
 | `rossum_get_hook_secret_keys` | List secret key names on a hook |
 | `rossum_list_annotations` | List annotations in a queue (filter by status) |
 | `rossum_get_annotation` | Get annotation metadata, messages, and state |
