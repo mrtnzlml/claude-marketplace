@@ -1,0 +1,8 @@
+{
+  "name": "rossum",
+  "description": "Document processing for transactional workflows — extract, validate, and route data from invoices, POs, and receipts",
+  "version": "0.1.0",
+  "author": {
+    "name": "mrtnzlml"
+  }
+}

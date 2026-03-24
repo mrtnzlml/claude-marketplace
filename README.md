@@ -2,7 +2,11 @@
 
 A [Claude Code plugin marketplace](https://code.claude.com/docs/en/plugin-marketplaces) for Rossum.ai workflows. Provides skills for generating Statements of Work, analyzing and documenting customer implementations, upgrading deprecated extensions, and a comprehensive set of autoloaded platform references.
 
-## Skills
+## Plugin: `rossum-sa`
+
+Claude Code plugin for Rossum.ai workflows — skills, references, and MCP tools for Rossum implementations.
+
+### Skills
 
 ### `/rossum-sa:write-sow`
 
@@ -84,6 +88,14 @@ A read-only MCP server for Rossum APIs. Starts automatically when the plugin is 
 | `rossum_get_hook_secret_keys` | Retrieve the list of secret key names configured on a hook by hook ID. Only key names are returned — values are encrypted and not retrievable. |
 | `rossum_get_annotation_content` | Retrieve the extracted data (content) of a single annotation by ID. Returns the data tree: sections, datapoints, and multivalues. |
 
+## Plugin: `rossum`
+
+Document processing for transactional workflows — extract, validate, and route data from invoices, POs, and receipts.
+
+### `/rossum:document-processing`
+
+Extracts structured data from invoices, purchase orders, receipts, and other transactional documents. Cross-validates fields, flags anomalies, handles multi-language documents, and outputs structured JSON with confidence scores for ERP import.
+
 ## Installation
 
 ### Add the marketplace
@@ -92,16 +104,18 @@ A read-only MCP server for Rossum APIs. Starts automatically when the plugin is 
 /plugin marketplace add mrtnzlml/claude-marketplace
 ```
 
-### Install the plugin
+### Install a plugin
 
 ```bash
 /plugin install rossum-sa@mrtnzlml-claude-marketplace
+/plugin install rossum@mrtnzlml-claude-marketplace
 ```
 
 ### Test locally
 
 ```bash
 claude --plugin-dir /path/to/claude-marketplace/plugins/rossum-sa
+claude --plugin-dir /path/to/claude-marketplace/plugins/rossum
 ```
 
 ### Per-project (shared via git)
@@ -110,6 +124,9 @@ Add to `.claude/settings.json`:
 
 ```json
 {
-  "enabledPlugins": ["rossum-sa@mrtnzlml-claude-marketplace"]
+  "enabledPlugins": [
+    "rossum-sa@mrtnzlml-claude-marketplace",
+    "rossum@mrtnzlml-claude-marketplace"
+  ]
 }
 ```

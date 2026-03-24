@@ -11,6 +11,11 @@
       "name": "rossum-sa",
       "source": "./plugins/rossum-sa",
       "description": "Claude Code plugin for Rossum.ai workflows — skills, references, and MCP tools for Rossum implementations"
+    },
+    {
+      "name": "rossum",
+      "source": "./plugins/rossum",
+      "description": "Document processing for transactional workflows — extract, validate, and route data from invoices, POs, and receipts"
     }
   ]
 }
