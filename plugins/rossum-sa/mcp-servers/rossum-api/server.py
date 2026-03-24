@@ -217,6 +217,7 @@ HANDLERS = {}
 
 _READ_ONLY = {"readOnlyHint": True}
 _WRITE = {"readOnlyHint": False, "destructiveHint": False}
+_DESTRUCTIVE = {"readOnlyHint": False, "destructiveHint": True}
 
 
 def _tool(name, description, schema, annotations=None):
@@ -284,6 +285,21 @@ def handle_set_token(request_id, arguments):
     _cached_token = token
     _token_validated = True
     return tool_result(request_id, f"Connected to {base_url}. Token validated for this session.")
+
+
+@_tool(
+    "rossum_whoami",
+    "Returns the authenticated user's identity, organization, and role. "
+    "Useful for checking permissions and orientation after connecting.",
+    {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": False,
+    },
+    annotations=_READ_ONLY,
+)
+def handle_whoami(request_id, arguments):
+    _rossum_get(request_id, "/api/v1/auth/user")
 
 
 @_tool(
@@ -466,6 +482,77 @@ def handle_create_search_index(request_id, arguments):
     if "name" in arguments:
         body["name"] = arguments["name"]
     return _data_storage_call(request_id, "/v1/search_indexes/create", body)
+
+
+@_tool(
+    "data_storage_drop_index",
+    "Drops a database index from a Rossum Data Storage collection. "
+    "This is a destructive write operation.",
+    {
+        "type": "object",
+        "required": ["collectionName", "indexName"],
+        "properties": {
+            "collectionName": {"type": "string", "description": "The name of the collection."},
+            "indexName": {"type": "string", "description": "The name of the index to drop."},
+        },
+        "additionalProperties": False,
+    },
+    annotations=_DESTRUCTIVE,
+)
+def handle_drop_index(request_id, arguments):
+    return _data_storage_call(request_id, "/v1/indexes/drop", {
+        "collectionName": arguments["collectionName"],
+        "indexName": arguments["indexName"],
+    })
+
+
+@_tool(
+    "data_storage_drop_search_index",
+    "Drops an Atlas Search index from a Rossum Data Storage collection. "
+    "This is a destructive write operation.",
+    {
+        "type": "object",
+        "required": ["collectionName", "name"],
+        "properties": {
+            "collectionName": {"type": "string", "description": "The name of the collection."},
+            "name": {"type": "string", "description": "The name of the search index to drop."},
+        },
+        "additionalProperties": False,
+    },
+    annotations=_DESTRUCTIVE,
+)
+def handle_drop_search_index(request_id, arguments):
+    return _data_storage_call(request_id, "/v1/search_indexes/drop", {
+        "collectionName": arguments["collectionName"],
+        "name": arguments["name"],
+    })
+
+
+@_tool(
+    "data_storage_update_search_index",
+    "Updates an existing Atlas Search index definition on a Rossum Data Storage collection. "
+    "This is a write operation that modifies the search index configuration.",
+    {
+        "type": "object",
+        "required": ["collectionName", "name", "definition"],
+        "properties": {
+            "collectionName": {"type": "string", "description": "The name of the collection."},
+            "name": {"type": "string", "description": "The name of the search index to update."},
+            "definition": {
+                "type": "object",
+                "description": "Updated Atlas Search index definition including mappings and optional analyzers.",
+            },
+        },
+        "additionalProperties": False,
+    },
+    annotations=_WRITE,
+)
+def handle_update_search_index(request_id, arguments):
+    return _data_storage_call(request_id, "/v1/search_indexes/update", {
+        "collectionName": arguments["collectionName"],
+        "name": arguments["name"],
+        "definition": arguments["definition"],
+    })
 
 
 @_tool(

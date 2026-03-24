@@ -24,6 +24,7 @@ MCP server (`rossum-api`) — starts automatically when the plugin is enabled. W
 |------|-------------|
 | **Connection** | |
 | `rossum_set_token` | Authenticate with a Rossum environment |
+| `rossum_whoami` | Show authenticated user, organization, and role |
 | **Rossum API** | |
 | `rossum_list_workspaces` | List workspaces |
 | `rossum_list_queues` | List queues (filter by workspace, status) |
@@ -44,6 +45,9 @@ MCP server (`rossum-api`) — starts automatically when the plugin is enabled. W
 | `data_storage_list_search_indexes` | List Atlas Search indexes |
 | `data_storage_create_index` | Create a database index *(write)* |
 | `data_storage_create_search_index` | Create an Atlas Search index *(write)* |
+| `data_storage_drop_index` | Drop a database index *(destructive)* |
+| `data_storage_drop_search_index` | Drop an Atlas Search index *(destructive)* |
+| `data_storage_update_search_index` | Update an Atlas Search index definition *(write)* |
 
 ### `rossum`
 

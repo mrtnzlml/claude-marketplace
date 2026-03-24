@@ -110,6 +110,7 @@ class TestToolRegistration:
     def test_all_tools_registered(self):
         expected = {
             "rossum_set_token",
+            "rossum_whoami",
             "data_storage_healthz",
             "data_storage_list_collections",
             "data_storage_aggregate",
@@ -118,6 +119,9 @@ class TestToolRegistration:
             "data_storage_list_search_indexes",
             "data_storage_create_index",
             "data_storage_create_search_index",
+            "data_storage_drop_index",
+            "data_storage_drop_search_index",
+            "data_storage_update_search_index",
             "rossum_list_users",
             "rossum_list_audit_logs",
             "rossum_get_hook_secret_keys",
@@ -134,11 +138,15 @@ class TestToolRegistration:
     def test_all_tools_have_handlers(self):
         assert set(server.TOOLS.keys()) == set(server.HANDLERS.keys())
 
-    def test_read_only_annotations(self):
-        write_tools = {"data_storage_create_index", "data_storage_create_search_index"}
+    def test_annotations(self):
+        write_tools = {"data_storage_create_index", "data_storage_create_search_index", "data_storage_update_search_index"}
+        destructive_tools = {"data_storage_drop_index", "data_storage_drop_search_index"}
         for name, tool_def in server.TOOLS.items():
             ann = tool_def.get("annotations", {})
-            if name in write_tools:
+            if name in destructive_tools:
+                assert ann.get("readOnlyHint") is False, f"{name} should be write"
+                assert ann.get("destructiveHint") is True, f"{name} should be destructive"
+            elif name in write_tools:
                 assert ann.get("readOnlyHint") is False, f"{name} should be write"
                 assert ann.get("destructiveHint") is False, f"{name} should not be destructive"
             else:
@@ -193,7 +201,7 @@ class TestMCPProtocol:
     def test_tools_list_returns_all(self, capture):
         server.respond("req-1", {"tools": list(server.TOOLS.values())})
         tools = capture.last_result["tools"]
-        assert len(tools) == 19
+        assert len(tools) == len(server.TOOLS)
 
     def test_unknown_tool(self, capture):
         server.tool_result("req-1", "Unknown tool: fake_tool", is_error=True)
@@ -346,6 +354,19 @@ class TestSetToken:
         assert server._token_validated is False
 
 
+class TestWhoami:
+    def test_whoami(self, capture):
+        _set_connected()
+        with _mock_urlopen({"id": 1, "email": "admin@example.com", "organization": "https://api/orgs/1"}):
+            server.handle_whoami("req-1", {})
+        data = json.loads(capture.last_text)
+        assert data["email"] == "admin@example.com"
+
+    def test_whoami_not_connected(self, capture):
+        server.handle_whoami("req-1", {})
+        assert capture.last_is_error
+
+
 class TestHealthz:
     def test_healthy(self, capture):
         with mock.patch.object(server, "_check_health", return_value=True):
@@ -411,6 +432,28 @@ class TestDataStorageTools:
                 "collectionName": "test",
                 "definition": {"mappings": {"dynamic": True}},
                 "name": "my_index",
+            })
+        assert not capture.last_is_error
+
+    def test_drop_index(self, capture):
+        _set_connected()
+        with _mock_urlopen({"ok": True}):
+            server.handle_drop_index("req-1", {"collectionName": "test", "indexName": "field_1"})
+        assert not capture.last_is_error
+
+    def test_drop_search_index(self, capture):
+        _set_connected()
+        with _mock_urlopen({"ok": True}):
+            server.handle_drop_search_index("req-1", {"collectionName": "test", "name": "default"})
+        assert not capture.last_is_error
+
+    def test_update_search_index(self, capture):
+        _set_connected()
+        with _mock_urlopen({"ok": True}):
+            server.handle_update_search_index("req-1", {
+                "collectionName": "test",
+                "name": "default",
+                "definition": {"mappings": {"dynamic": False}},
             })
         assert not capture.last_is_error
 
@@ -555,6 +598,7 @@ class TestRossumApiTools:
     def test_tools_require_connection(self, capture):
         """All authenticated tools should fail gracefully when not connected."""
         authenticated_handlers = [
+            (server.handle_whoami, {}),
             (server.handle_list_collections, {}),
             (server.handle_aggregate, {"collectionName": "c", "pipeline": []}),
             (server.handle_find, {"collectionName": "c"}),
@@ -562,6 +606,9 @@ class TestRossumApiTools:
             (server.handle_list_search_indexes, {"collectionName": "c"}),
             (server.handle_create_index, {"collectionName": "c", "keys": {"f": 1}}),
             (server.handle_create_search_index, {"collectionName": "c", "definition": {}}),
+            (server.handle_drop_index, {"collectionName": "c", "indexName": "x"}),
+            (server.handle_drop_search_index, {"collectionName": "c", "name": "x"}),
+            (server.handle_update_search_index, {"collectionName": "c", "name": "x", "definition": {}}),
             (server.handle_list_users, {}),
             (server.handle_list_audit_logs, {"object_type": "user"}),
             (server.handle_get_hook_secret_keys, {"hook_id": 1}),
@@ -607,7 +654,30 @@ class TestMainLoop:
         tool_names = {t["name"] for t in responses[0]["result"]["tools"]}
         assert "rossum_set_token" in tool_names
         assert "data_storage_create_index" in tool_names
-        assert len(tool_names) == 19
+        assert len(tool_names) == len(server.TOOLS)
+
+    def test_tools_list_annotations_survive_protocol(self, monkeypatch):
+        """Write and destructive annotations must be present in the tools/list response."""
+        responses = self._run_messages([
+            {"jsonrpc": "2.0", "id": 1, "method": "tools/list"},
+        ], monkeypatch)
+        tools_by_name = {t["name"]: t for t in responses[0]["result"]["tools"]}
+
+        # Write (non-destructive)
+        for name in ("data_storage_create_index", "data_storage_create_search_index", "data_storage_update_search_index"):
+            ann = tools_by_name[name]["annotations"]
+            assert ann["readOnlyHint"] is False, f"{name} readOnlyHint"
+            assert ann["destructiveHint"] is False, f"{name} destructiveHint"
+
+        # Destructive
+        for name in ("data_storage_drop_index", "data_storage_drop_search_index"):
+            ann = tools_by_name[name]["annotations"]
+            assert ann["readOnlyHint"] is False, f"{name} readOnlyHint"
+            assert ann["destructiveHint"] is True, f"{name} destructiveHint"
+
+        # Read-only (spot check)
+        assert tools_by_name["rossum_whoami"]["annotations"]["readOnlyHint"] is True
+        assert tools_by_name["data_storage_find"]["annotations"]["readOnlyHint"] is True
 
     def test_call_unknown_tool(self, monkeypatch):
         responses = self._run_messages([
