@@ -62,6 +62,7 @@ Behavior:
 - Removes local files for objects deleted in Rossum
 - Extracts formula field code into separate `.py` files in `formulas/` directories
 - Extracts hook code into separate `.py`/`.js` files alongside hook JSON
+- **Editing rule:** Always edit the extracted `.py` file, never the `code` field inside the JSON. The `.py` file is the source of truth — `prd2 push` merges it back into the JSON automatically.
 - Supports all object types: organizations, workspaces, queues, inboxes, schemas, hooks, labels, rules, engines, engine fields, email templates, workflows, workflow steps
 
 ### `prd2 push [destinations...] [options]`

@@ -172,7 +172,7 @@ Create a task list with one task per applicable phase to track progress.
 2. **For each extension, follow the hook creation workflow:**
    1. **Create the hook shell via API.** **Confirm with user before executing.**
    2. **`prd2 pull`** to get the hook config locally.
-   3. **Write the serverless function** code using the TxScript API (see `txscript-reference`).
+   3. **Write the serverless function** code in the `.py` file using the TxScript API (see `txscript-reference`). **NEVER edit the `code` field inside the hook JSON** — `prd2` extracts code into `.py` files on pull and merges it back on push, so the `.py` file is the single source of truth.
    4. **`prd2 push`** to deploy. **Confirm with user before executing.**
 
 3. **Define `run_after` ordering.** Map out the execution chain:
@@ -185,8 +185,10 @@ Create a task list with one task per applicable phase to track progress.
 
 4. **Formula fields.** For simple calculations, prefer formula fields over serverless functions:
    - Create the formula as `formulas/<field_id>.py` in the queue directory
-   - The schema.json formula property is auto-synced on deploy — only edit the .py file
+   - The schema.json formula property is auto-synced on deploy — only edit the `.py` file, never the JSON
    - See `rossum-reference` for formula field patterns
+
+> **Code editing rule:** Always edit the `.py` file, never the `code` field in the hook JSON or the `formula` property in schema JSON. `prd2` manages the JSON ↔ `.py` synchronization automatically.
 
 **Artifact:** Hook configs and serverless function code, deployed with correct execution ordering.
 

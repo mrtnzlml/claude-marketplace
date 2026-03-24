@@ -743,6 +743,8 @@ curl -X POST -H 'Authorization: Bearer TOKEN' \
 
 Custom code executed in response to events without maintaining infrastructure. Functions receive event payloads identical to webhooks and can modify annotation data.
 
+> **Editing rule:** When working with serverless function code locally, always edit the `.py` file next to the hook JSON. Never edit the `code` field inside the hook's `.json` file. `prd2` extracts code into `.py` files on pull and merges it back on push.
+
 ```bash
 # Create a serverless function
 curl -X POST -H 'Authorization: Bearer TOKEN' \

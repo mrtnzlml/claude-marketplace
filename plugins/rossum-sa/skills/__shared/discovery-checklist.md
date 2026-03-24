@@ -62,7 +62,7 @@ project/
 - **Queues** — `queue.json` with hook references, rule references, automation settings (`default_score_threshold`, `automation_level`, `automation_enabled`)
 - **Schemas** — `schema.json` containing `category`, `datapoint`, `multivalue`, `section` keys defining the extraction data model
 - **Inboxes** — `inbox.json` with email routing, filtering, and template references
-- **Hooks/extensions** — JSON files in `hooks/` directories; look for `hook_type`, `config`, `sideload`, `settings_schema`; MDH matching configs and SFTP export configs are embedded inside hook settings
+- **Hooks/extensions** — JSON files in `hooks/` directories; look for `hook_type`, `config`, `sideload`, `settings_schema`; MDH matching configs and SFTP export configs are embedded inside hook settings. **When editing hook code, always edit the `.py` file, never the `code` field in the JSON** — `prd2` manages the synchronization.
 - **Rules** — JSON files in `rules/` directories with validation conditions, triggers, and actions (automation blockers, messages, labels)
 - **Labels** — JSON files in `labels/` directories defining tags for categorization (priority, status, department)
 - **Formula files** — Python `.py` files in `formulas/` subdirectories of each queue; these implement field calculations, data normalization, export mappings, and MDH lookup logic

@@ -8,6 +8,8 @@ user-invocable: false
 
 This skill provides a practical guide for writing Rossum serverless functions using the TxScript API. It covers the entry point pattern, field access, utility functions, validation recipes, and common schema field conventions. For complete details, see [reference.md](reference.md).
 
+**IMPORTANT — editing rule:** When modifying hook code, always edit the `.py` file next to the hook JSON. NEVER edit the `code` field inside the hook's `.json` file. `prd2` extracts hook code into `.py` files on pull and merges it back into the JSON on push — the `.py` file is the single source of truth.
+
 Use this knowledge when:
 - Writing new Rossum serverless functions (hooks) using TxScript
 - Understanding the `rossum_hook_request_handler` entry point pattern
