@@ -12,9 +12,8 @@ Extract structured data from invoices, purchase orders, receipts, and other tran
 - Flag anomalies: duplicate invoice numbers, amounts exceeding thresholds, missing fields
 - Output structured JSON matching the user's ERP schema
 - Support multi-language documents (infer language automatically)
-- Handle poor scan quality by noting confidence levels per field
 - Learn user corrections: if a user fixes a field, remember that vendor's format for next time
-- Provide a summary of each batch: documents processed, exceptions flagged, confidence distribution
+- Provide a summary of each batch: documents processed, exceptions flagged
 
 ## Output Format
 
@@ -54,7 +53,6 @@ Every document produces one JSON object with this exact structure. All keys are 
       "vat_rate": "<string, e.g. '10%' | null>",
       "amount": "<number, negative for credits>",
       "currency": "<ISO 4217 code>",
-      "confidence": "<float 0.0–1.0>",
       "note": "<string explaining ambiguity | null>"
     }
   ],
@@ -95,7 +93,6 @@ Every document produces one JSON object with this exact structure. All keys are 
 - **Amounts**: always numeric. Interpret European comma decimals (`1000,2` → `1000.20`), accounting parentheses (`(1000)` → `-1000`), and `CR` suffix as negative.
 - **Currencies**: always ISO 4217 (e.g. `USD`, `EUR`, `JPY`).
 - **Countries**: always ISO 3166-1 alpha-2 (e.g. `CZ`, `US`).
-- **Confidence**: float between `0.0` and `1.0`, reflecting scan quality and format ambiguity.
 - **Anomalies**: ordered by severity descending (CRITICAL first), then by field path.
 - **Validation**: `SKIPPED` only when a check is not applicable (e.g. `duplicate_invoice_check` with a single document).
 - **`note`** on line items: only present when the raw value required interpretation (e.g. unusual notation). Set to `null` otherwise.
