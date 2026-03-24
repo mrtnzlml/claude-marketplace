@@ -90,8 +90,10 @@ Per-project (`.claude/settings.json`):
 | `data_storage_aggregate` | Run MongoDB aggregation pipelines |
 | `data_storage_list_indexes` | List collection indexes |
 | `data_storage_list_search_indexes` | List Atlas Search indexes |
-| `data_storage_create_index` | Create a database index *(write)* |
-| `data_storage_create_search_index` | Create an Atlas Search index *(write)* |
-| `data_storage_drop_index` | Drop a database index *(destructive)* |
-| `data_storage_drop_search_index` | Drop an Atlas Search index *(destructive)* |
-| `data_storage_update_search_index` | Update an Atlas Search index definition *(write)* |
+| `data_storage_create_index` | :pencil2: Create a database index |
+| `data_storage_create_search_index` | :pencil2: Create an Atlas Search index |
+| `data_storage_update_search_index` | :pencil2: Update an Atlas Search index definition |
+| `data_storage_drop_index` | :warning: Drop a database index |
+| `data_storage_drop_search_index` | :warning: Drop an Atlas Search index |
+
+:pencil2: = write (requires approval) · :warning: = destructive (requires approval)
