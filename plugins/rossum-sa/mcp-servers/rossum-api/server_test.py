@@ -113,6 +113,7 @@ class TestToolRegistration:
             "data_storage_healthz",
             "data_storage_list_collections",
             "data_storage_aggregate",
+            "data_storage_find",
             "data_storage_list_indexes",
             "data_storage_list_search_indexes",
             "data_storage_create_index",
@@ -122,8 +123,11 @@ class TestToolRegistration:
             "rossum_get_hook_secret_keys",
             "rossum_get_annotation_content",
             "rossum_list_queues",
+            "rossum_get_queue",
             "rossum_list_hooks",
+            "rossum_get_hook",
             "rossum_get_schema",
+            "rossum_list_workspaces",
         }
         assert set(server.TOOLS.keys()) == expected
 
@@ -189,7 +193,7 @@ class TestMCPProtocol:
     def test_tools_list_returns_all(self, capture):
         server.respond("req-1", {"tools": list(server.TOOLS.values())})
         tools = capture.last_result["tools"]
-        assert len(tools) == 15
+        assert len(tools) == 19
 
     def test_unknown_tool(self, capture):
         server.tool_result("req-1", "Unknown tool: fake_tool", is_error=True)
@@ -410,6 +414,34 @@ class TestDataStorageTools:
             })
         assert not capture.last_is_error
 
+    def test_find(self, capture):
+        _set_connected()
+        with _mock_urlopen({"results": [{"_id": "abc", "name": "test"}]}):
+            server.handle_find("req-1", {
+                "collectionName": "test",
+                "query": {"name": "test"},
+                "projection": {"name": 1},
+                "sort": {"name": 1},
+                "limit": 10,
+            })
+        data = json.loads(capture.last_text)
+        assert data["results"][0]["name"] == "test"
+
+    def test_find_defaults(self, capture):
+        _set_connected()
+        with _mock_urlopen({"results": []}) as m:
+            server.handle_find("req-1", {"collectionName": "c"})
+        body = json.loads(m.call_args[0][0].data)
+        assert body["limit"] == 50
+        assert body["query"] == {}
+
+    def test_find_limit_capped(self, capture):
+        _set_connected()
+        with _mock_urlopen({"results": []}) as m:
+            server.handle_find("req-1", {"collectionName": "c", "limit": 9999})
+        body = json.loads(m.call_args[0][0].data)
+        assert body["limit"] == 1000
+
 
 class TestRossumApiTools:
     def _mock_list_response(self, results, next_url=None):
@@ -486,6 +518,23 @@ class TestRossumApiTools:
         assert "queue=10" in call_url
         assert "active=false" in call_url
 
+    def test_get_queue(self, capture):
+        _set_connected()
+        with _mock_urlopen({"id": 10, "name": "Invoices", "locale": "en_US"}) as m:
+            server.handle_get_queue("req-1", {"queue_id": 10})
+        data = json.loads(capture.last_text)
+        assert data["name"] == "Invoices"
+        assert "/queues/10" in m.call_args[0][0].full_url
+
+    def test_get_hook(self, capture):
+        _set_connected()
+        hook_data = {"id": 5, "name": "Validator", "config": {"code": "def rossum_hook(...):"}}
+        with _mock_urlopen(hook_data) as m:
+            server.handle_get_hook("req-1", {"hook_id": 5})
+        data = json.loads(capture.last_text)
+        assert data["config"]["code"] == "def rossum_hook(...):"
+        assert "/hooks/5" in m.call_args[0][0].full_url
+
     def test_get_schema(self, capture):
         _set_connected()
         with _mock_urlopen({"id": 5, "content": [{"category": "section"}]}):
@@ -493,11 +542,22 @@ class TestRossumApiTools:
         data = json.loads(capture.last_text)
         assert data["id"] == 5
 
+    def test_list_workspaces(self, capture):
+        _set_connected()
+        workspaces = [{"id": 1, "name": "Production", "organization": "https://api/orgs/1",
+                       "queues": ["https://api/queues/10"], "autopilot": False, "extra": "ignored"}]
+        with self._mock_list_response(workspaces):
+            server.handle_list_workspaces("req-1", {})
+        data = json.loads(capture.last_text)
+        assert data["results"][0]["name"] == "Production"
+        assert "extra" not in data["results"][0]
+
     def test_tools_require_connection(self, capture):
         """All authenticated tools should fail gracefully when not connected."""
         authenticated_handlers = [
             (server.handle_list_collections, {}),
             (server.handle_aggregate, {"collectionName": "c", "pipeline": []}),
+            (server.handle_find, {"collectionName": "c"}),
             (server.handle_list_indexes, {"collectionName": "c"}),
             (server.handle_list_search_indexes, {"collectionName": "c"}),
             (server.handle_create_index, {"collectionName": "c", "keys": {"f": 1}}),
@@ -507,8 +567,11 @@ class TestRossumApiTools:
             (server.handle_get_hook_secret_keys, {"hook_id": 1}),
             (server.handle_get_annotation_content, {"annotation_id": 1}),
             (server.handle_list_queues, {}),
+            (server.handle_get_queue, {"queue_id": 1}),
             (server.handle_list_hooks, {}),
+            (server.handle_get_hook, {"hook_id": 1}),
             (server.handle_get_schema, {"schema_id": 1}),
+            (server.handle_list_workspaces, {}),
         ]
         for handler, args in authenticated_handlers:
             capture.messages.clear()
@@ -544,7 +607,7 @@ class TestMainLoop:
         tool_names = {t["name"] for t in responses[0]["result"]["tools"]}
         assert "rossum_set_token" in tool_names
         assert "data_storage_create_index" in tool_names
-        assert len(tool_names) == 15
+        assert len(tool_names) == 19
 
     def test_call_unknown_tool(self, monkeypatch):
         responses = self._run_messages([

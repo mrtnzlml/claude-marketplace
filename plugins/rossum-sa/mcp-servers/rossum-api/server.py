@@ -468,6 +468,43 @@ def handle_create_search_index(request_id, arguments):
     return _data_storage_call(request_id, "/v1/search_indexes/create", body)
 
 
+@_tool(
+    "data_storage_find",
+    "Queries documents in a Rossum Data Storage collection. Simpler than aggregate "
+    "for basic lookups. Returns matching documents up to the specified limit.",
+    {
+        "type": "object",
+        "required": ["collectionName"],
+        "properties": {
+            "collectionName": {"type": "string", "description": "The name of the collection."},
+            "query": {"type": "object", "description": "MongoDB query filter (default: {} returns all)."},
+            "projection": {"type": "object", "description": "Fields to include (1) or exclude (0)."},
+            "sort": {"type": "object", "description": "Sort specification (e.g. {\"createdAt\": -1})."},
+            "limit": {
+                "type": "integer",
+                "description": "Maximum documents to return (default: 50, max: 1000).",
+            },
+            "skip": {
+                "type": "integer",
+                "description": "Number of documents to skip before returning results.",
+            },
+        },
+        "additionalProperties": False,
+    },
+    annotations=_READ_ONLY,
+)
+def handle_find(request_id, arguments):
+    body = {"collectionName": arguments["collectionName"], "query": arguments.get("query", {})}
+    if "projection" in arguments:
+        body["projection"] = arguments["projection"]
+    if "sort" in arguments:
+        body["sort"] = arguments["sort"]
+    body["limit"] = min(arguments.get("limit", 50), 1000)
+    if "skip" in arguments:
+        body["skip"] = arguments["skip"]
+    return _data_storage_call(request_id, "/v1/data/find", body)
+
+
 def _paginate(request_id, url, *, max_results=None, pick_fields=None):
     """Auto-paginate a Rossum list endpoint. Returns list of results or None on error."""
     all_results = []
@@ -625,6 +662,27 @@ def handle_list_queues(request_id, arguments):
     _rossum_list(request_id, "/api/v1/queues", params, pick_fields=_QUEUE_FIELDS)
 
 
+@_tool(
+    "rossum_get_queue",
+    "Retrieves full details of a single queue including inbox, connector, locale, "
+    "and all configuration. Use rossum_list_queues first to find queue IDs.",
+    {
+        "type": "object",
+        "required": ["queue_id"],
+        "properties": {
+            "queue_id": {
+                "type": "integer",
+                "description": "The queue ID.",
+            },
+        },
+        "additionalProperties": False,
+    },
+    annotations=_READ_ONLY,
+)
+def handle_get_queue(request_id, arguments):
+    _rossum_get(request_id, f"/api/v1/queues/{arguments['queue_id']}")
+
+
 _HOOK_FIELDS = ("id", "name", "type", "events", "queues", "active", "run_after", "token_owner")
 
 
@@ -658,6 +716,27 @@ def handle_list_hooks(request_id, arguments):
 
 
 @_tool(
+    "rossum_get_hook",
+    "Retrieves full details of a single hook (extension) including its code, URL, "
+    "settings, secrets key names, and configuration. Use rossum_list_hooks first to find hook IDs.",
+    {
+        "type": "object",
+        "required": ["hook_id"],
+        "properties": {
+            "hook_id": {
+                "type": "integer",
+                "description": "The hook ID.",
+            },
+        },
+        "additionalProperties": False,
+    },
+    annotations=_READ_ONLY,
+)
+def handle_get_hook(request_id, arguments):
+    _rossum_get(request_id, f"/api/v1/hooks/{arguments['hook_id']}")
+
+
+@_tool(
     "rossum_get_schema",
     "Retrieves the full schema definition of a queue. The schema defines all datapoints "
     "(fields), sections, multivalue (table) structures, and their validation rules.",
@@ -676,6 +755,32 @@ def handle_list_hooks(request_id, arguments):
 )
 def handle_get_schema(request_id, arguments):
     _rossum_get(request_id, f"/api/v1/schemas/{arguments['schema_id']}")
+
+
+_WORKSPACE_FIELDS = ("id", "name", "organization", "queues", "autopilot")
+
+
+@_tool(
+    "rossum_list_workspaces",
+    "Lists all workspaces in the Rossum organization. Workspaces group queues "
+    "and define organizational boundaries.",
+    {
+        "type": "object",
+        "properties": {
+            "organization": {
+                "type": "integer",
+                "description": "Filter by organization ID.",
+            },
+        },
+        "additionalProperties": False,
+    },
+    annotations=_READ_ONLY,
+)
+def handle_list_workspaces(request_id, arguments):
+    params = [("page_size", 100)]
+    if "organization" in arguments:
+        params.append(("organization", arguments["organization"]))
+    _rossum_list(request_id, "/api/v1/workspaces", params, pick_fields=_WORKSPACE_FIELDS)
 
 
 # --- Main loop ---
