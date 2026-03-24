@@ -2,7 +2,7 @@
 
 Turn Claude into a Rossum implementation partner — audit hooks, analyze schemas, query Data Storage, extract documents, and generate SOWs, all from your terminal.
 
-6 skills · 7 reference packs · 36 MCP tools — [Claude Code plugin marketplace](https://code.claude.com/docs/en/plugin-marketplaces) for Rossum.ai.
+6 skills · 7 reference packs · 37 MCP tools — [Claude Code plugin marketplace](https://code.claude.com/docs/en/plugin-marketplaces) for Rossum.ai.
 
 <!-- TODO: add a terminal demo GIF here (e.g. invoice extraction or hook audit) -->
 
@@ -141,6 +141,7 @@ The MCP server starts automatically when `rossum-sa` is enabled. Write and destr
 | `rossum_delete_hook` | ⚠️ Delete a hook |
 | `rossum_get_hook_secret_keys` | List secret key names on a hook |
 | `rossum_list_annotations` | List annotations in a queue (filter by status) |
+| `rossum_search_annotations` | Search annotations across queues (filter by status, date range, workspace) |
 | `rossum_get_annotation` | Get annotation metadata, messages, and state |
 | `rossum_get_annotation_content` | Get extracted data from an annotation |
 | `rossum_get_document` | Get document metadata (filename, MIME type) |

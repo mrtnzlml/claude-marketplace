@@ -762,6 +762,106 @@ def handle_list_annotations(request_id, arguments):
 
 
 @_tool(
+    "rossum_search_annotations",
+    "Search annotations across queues with flexible filtering. More powerful than "
+    "rossum_list_annotations: supports cross-queue search (no required queue), "
+    "date ranges, ordering, and workspace filtering. Use this to find specific "
+    "documents by status, date, or across multiple queues. "
+    "Use rossum_get_annotation_content to retrieve extracted data for a specific result.",
+    {
+        "type": "object",
+        "properties": {
+            "queue": {
+                "type": "integer",
+                "description": "Filter by queue ID. Omit to search across all queues.",
+            },
+            "status": {
+                "type": "string",
+                "description": (
+                    "Filter by status: 'to_review', 'reviewing', 'confirmed', "
+                    "'rejected', 'exporting', 'exported', 'failed_export', "
+                    "'postponed', 'deleted', 'purged', 'split', 'importing'."
+                ),
+            },
+            "workspace": {
+                "type": "integer",
+                "description": "Filter by workspace ID.",
+            },
+            "created_at_after": {
+                "type": "string",
+                "description": "Filter: created after this ISO 8601 date (e.g. '2024-01-01T00:00:00Z').",
+            },
+            "created_at_before": {
+                "type": "string",
+                "description": "Filter: created before this ISO 8601 date.",
+            },
+            "ordering": {
+                "type": "string",
+                "description": (
+                    "Sort order. Use field name for ascending, prefix with '-' for "
+                    "descending (e.g. '-created_at', 'modified_at')."
+                ),
+            },
+            "max_results": {
+                "type": "integer",
+                "description": "Maximum annotations to return (default: 50, max: 500).",
+            },
+        },
+        "additionalProperties": False,
+    },
+    annotations=_READ_ONLY,
+)
+def handle_search_annotations(request_id, arguments):
+    max_results = min(int(arguments.get("max_results", 50)), 500)
+    page_size = min(max_results, 100)
+
+    params = [("page_size", page_size)]
+    for key in ("queue", "status", "workspace"):
+        if key in arguments:
+            params.append((key, arguments[key]))
+    if "created_at_after" in arguments:
+        params.append(("created_at_after", arguments["created_at_after"]))
+    if "created_at_before" in arguments:
+        params.append(("created_at_before", arguments["created_at_before"]))
+    if "ordering" in arguments:
+        params.append(("ordering", arguments["ordering"]))
+
+    base_url, _ = _ensure_connection(request_id)
+    if not base_url:
+        return
+
+    all_results = []
+    total_count = None
+    url = f"{base_url}/api/v1/annotations?{urlencode(params)}"
+
+    while url and len(all_results) < max_results:
+        page = _http_request(request_id, url)
+        if page is None:
+            return
+
+        if total_count is None:
+            total_count = page.get("pagination", {}).get("total", 0)
+
+        for item in page.get("results", []):
+            if len(all_results) >= max_results:
+                break
+            all_results.append({k: item[k] for k in _ANNOTATION_FIELDS if k in item})
+
+        next_url = page.get("pagination", {}).get("next")
+        if not next_url:
+            break
+        if _validate_base_url(next_url) != _validate_base_url(url):
+            break
+        url = next_url
+
+    tool_result(request_id, json.dumps({
+        "total": total_count,
+        "returned": len(all_results),
+        "results": all_results,
+    }, indent=2))
+
+
+@_tool(
     "rossum_get_annotation_content",
     "Retrieves the extracted data (content) of a single annotation. "
     "Returns the annotation's data tree: sections containing datapoints and multivalues (tables).",
