@@ -28,6 +28,14 @@ Document processing for transactional workflows.
 |-------|-------------|
 | `/rossum:document-processing` | Extract structured data from invoices, POs, and receipts with validation and anomaly detection |
 
+## Prompt examples
+
+> *Take the fuzzy match (`$search`) present in the "MDH (PO/GRN positions, Entity, MoO)" extension and run it against the MDH collections to fine-tune the matching score (`__searchScore`). The goal is to return as accurate documents as possible while correctly filtering garbage out. Use at least 100 MDH samples.*
+
+> *Analyze all available audit logs for the last year and print a histogram of user activity. Highlight suspicious patterns.*
+
+> *Are all indexes and search indexes set correctly on this project?*
+
 ## Installation
 
 ```bash
