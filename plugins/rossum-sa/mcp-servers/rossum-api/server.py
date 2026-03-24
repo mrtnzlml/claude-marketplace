@@ -445,6 +445,28 @@ def handle_create_search_index(request_id, arguments):
     return _data_storage_call(request_id, "/v1/search_indexes/create", body)
 
 
+def _paginate(request_id, url, *, max_results=None, pick_fields=None):
+    """Auto-paginate a Rossum list endpoint. Returns list of results or None on error."""
+    all_results = []
+    while url:
+        page = _http_request(request_id, url)
+        if page is None:
+            return None
+        for item in page.get("results", []):
+            if max_results and len(all_results) >= max_results:
+                break
+            all_results.append({k: item[k] for k in pick_fields if k in item} if pick_fields else item)
+        if max_results and len(all_results) >= max_results:
+            break
+        next_url = page.get("pagination", {}).get("next")
+        if not next_url:
+            break
+        if _validate_base_url(next_url) != _validate_base_url(url):
+            break
+        url = next_url
+    return all_results
+
+
 _USER_FIELDS = ("id", "email", "first_name", "last_name", "is_active")
 
 
@@ -464,27 +486,13 @@ def handle_list_users(request_id, arguments):
     base_url, _ = _ensure_connection(request_id)
     if not base_url:
         return
-    params = ["page_size=100"]
+    params = [("page_size", 100)]
     if "is_active" in arguments:
-        params.append(f"is_active={'true' if arguments['is_active'] else 'false'}")
+        params.append(("is_active", "true" if arguments["is_active"] else "false"))
 
-    url = f"{base_url}/api/v1/users?{'&'.join(params)}"
-    all_results = []
-
-    while url:
-        page = _http_request(request_id, url)
-        if page is None:
-            return
-        for user in page.get("results", []):
-            all_results.append({k: user[k] for k in _USER_FIELDS if k in user})
-        next_url = page.get("pagination", {}).get("next")
-        if not next_url:
-            break
-        if _validate_base_url(next_url) != _validate_base_url(url):
-            break
-        url = next_url
-
-    tool_result(request_id, json.dumps({"total": len(all_results), "results": all_results}, indent=2))
+    results = _paginate(request_id, f"{base_url}/api/v1/users?{urlencode(params)}", pick_fields=_USER_FIELDS)
+    if results is not None:
+        tool_result(request_id, json.dumps({"total": len(results), "results": results}, indent=2))
 
 
 @_tool(
@@ -529,25 +537,9 @@ def handle_list_audit_logs(request_id, arguments):
     if "action" in arguments:
         params.append(("action", arguments["action"]))
 
-    url = f"{base_url}/api/v1/audit_logs?{urlencode(params)}"
-    all_results = []
-
-    while url and len(all_results) < max_results:
-        page = _http_request(request_id, url)
-        if page is None:
-            return
-        for entry in page.get("results", []):
-            if len(all_results) >= max_results:
-                break
-            all_results.append(entry)
-        next_url = page.get("pagination", {}).get("next")
-        if not next_url:
-            break
-        if _validate_base_url(next_url) != _validate_base_url(url):
-            break
-        url = next_url
-
-    tool_result(request_id, json.dumps({"total": len(all_results), "results": all_results}, indent=2))
+    results = _paginate(request_id, f"{base_url}/api/v1/audit_logs?{urlencode(params)}", max_results=max_results)
+    if results is not None:
+        tool_result(request_id, json.dumps({"total": len(results), "results": results}, indent=2))
 
 
 @_tool(
@@ -602,6 +594,109 @@ def handle_get_annotation_content(request_id, arguments):
     annotation_id = arguments["annotation_id"]
     url = f"{base_url}/api/v1/annotations/{annotation_id}/content"
     result = _http_request(request_id, url)
+    if result is not None:
+        tool_result(request_id, json.dumps(result, indent=2))
+
+
+_QUEUE_FIELDS = ("id", "name", "workspace", "schema", "hooks", "status", "dedicated_engine")
+
+
+@_tool(
+    "rossum_list_queues",
+    "Lists all queues in the Rossum organization. Queues are the core processing unit — "
+    "each represents a document intake pipeline with its own schema and hooks.",
+    {
+        "type": "object",
+        "properties": {
+            "workspace": {
+                "type": "integer",
+                "description": "Filter by workspace ID.",
+            },
+            "status": {
+                "type": "string",
+                "description": "Filter by status: 'active', 'inactive', or 'deletion_requested'.",
+            },
+        },
+        "additionalProperties": False,
+    },
+    annotations=_READ_ONLY,
+)
+def handle_list_queues(request_id, arguments):
+    base_url, _ = _ensure_connection(request_id)
+    if not base_url:
+        return
+    params = [("page_size", 100)]
+    if "workspace" in arguments:
+        params.append(("workspace", arguments["workspace"]))
+    if "status" in arguments:
+        params.append(("status", arguments["status"]))
+
+    results = _paginate(request_id, f"{base_url}/api/v1/queues?{urlencode(params)}", pick_fields=_QUEUE_FIELDS)
+    if results is not None:
+        tool_result(request_id, json.dumps({"total": len(results), "results": results}, indent=2))
+
+
+_HOOK_FIELDS = ("id", "name", "type", "events", "queues", "active", "run_after", "token_owner")
+
+
+@_tool(
+    "rossum_list_hooks",
+    "Lists all hooks (extensions) in the Rossum organization. Hooks are serverless functions "
+    "or webhook endpoints triggered by queue events.",
+    {
+        "type": "object",
+        "properties": {
+            "queue": {
+                "type": "integer",
+                "description": "Filter by queue ID — return only hooks attached to this queue.",
+            },
+            "active": {
+                "type": "boolean",
+                "description": "Filter by active status.",
+            },
+        },
+        "additionalProperties": False,
+    },
+    annotations=_READ_ONLY,
+)
+def handle_list_hooks(request_id, arguments):
+    base_url, _ = _ensure_connection(request_id)
+    if not base_url:
+        return
+    params = [("page_size", 100)]
+    if "queue" in arguments:
+        params.append(("queue", arguments["queue"]))
+    if "active" in arguments:
+        params.append(("active", "true" if arguments["active"] else "false"))
+
+    results = _paginate(request_id, f"{base_url}/api/v1/hooks?{urlencode(params)}", pick_fields=_HOOK_FIELDS)
+    if results is not None:
+        tool_result(request_id, json.dumps({"total": len(results), "results": results}, indent=2))
+
+
+@_tool(
+    "rossum_get_schema",
+    "Retrieves the full schema definition of a queue. The schema defines all datapoints "
+    "(fields), sections, multivalue (table) structures, and their validation rules.",
+    {
+        "type": "object",
+        "required": ["schema_id"],
+        "properties": {
+            "schema_id": {
+                "type": "integer",
+                "description": "The schema ID (found in queue.schema URL).",
+            },
+        },
+        "additionalProperties": False,
+    },
+    annotations=_READ_ONLY,
+)
+def handle_get_schema(request_id, arguments):
+    base_url, _ = _ensure_connection(request_id)
+    if not base_url:
+        return
+    schema_id = arguments["schema_id"]
+    result = _http_request(request_id, f"{base_url}/api/v1/schemas/{schema_id}")
     if result is not None:
         tool_result(request_id, json.dumps(result, indent=2))
 
