@@ -195,6 +195,16 @@ def _rossum_get(request_id, path):
         tool_result(request_id, json.dumps(result, indent=2))
 
 
+def _rossum_post(request_id, path, body):
+    """POST to a Rossum API endpoint and return the result as JSON."""
+    base_url, _ = _ensure_connection(request_id)
+    if not base_url:
+        return
+    result = _http_request(request_id, f"{base_url}{path}", method="POST", body=body)
+    if result is not None:
+        tool_result(request_id, json.dumps(result, indent=2))
+
+
 def _rossum_list(request_id, endpoint, params, *, pick_fields=None, max_results=None):
     """Paginate a Rossum API list endpoint and return collected results."""
     base_url, _ = _ensure_connection(request_id)
@@ -849,6 +859,92 @@ def handle_list_hooks(request_id, arguments):
 )
 def handle_get_hook(request_id, arguments):
     _rossum_get(request_id, f"/api/v1/hooks/{arguments['hook_id']}")
+
+
+@_tool(
+    "rossum_create_hook",
+    "Creates a new hook (extension) in the Rossum organization. Hooks can be serverless functions "
+    "(type='function') executed in Python 3.12 or webhooks (type='webhook') that POST to an external URL. "
+    "This is a write operation.",
+    {
+        "type": "object",
+        "required": ["name", "type", "events", "config"],
+        "properties": {
+            "name": {
+                "type": "string",
+                "description": "Display name for the hook.",
+            },
+            "type": {
+                "type": "string",
+                "description": "Hook type: 'function' (serverless Python 3.12) or 'webhook' (external HTTP endpoint).",
+            },
+            "events": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": (
+                    "Events that trigger this hook. Common values: "
+                    "'annotation_content.initialize', 'annotation_content.started', "
+                    "'annotation_content.updated', 'annotation_content.confirm', "
+                    "'annotation_content.export', 'annotation_content.user_update', "
+                    "'email.received', 'invocation.manual'."
+                ),
+            },
+            "config": {
+                "type": "object",
+                "description": (
+                    "Type-specific configuration. "
+                    "For function: {\"runtime\": \"python3.12\", \"code\": \"def rossum_hook_request_handler(payload):\\n    return payload\"}. "
+                    "For webhook: {\"url\": \"https://example.com/webhook\"}. "
+                    "Optional config keys: timeout_s (default 30), retry_count, payload_logging_enabled."
+                ),
+            },
+            "queue_ids": {
+                "type": "array",
+                "items": {"type": "integer"},
+                "description": "Queue IDs to attach this hook to. Omit to create unattached.",
+            },
+            "active": {
+                "type": "boolean",
+                "description": "Whether the hook is active (default: true).",
+            },
+            "run_after": {
+                "type": "array",
+                "items": {"type": "integer"},
+                "description": "Hook IDs that must run before this one (execution ordering).",
+            },
+            "sideload": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "Additional data to include in payloads (e.g. ['schemas']).",
+            },
+            "token_owner": {
+                "type": "integer",
+                "description": "User ID whose permissions the hook uses for API calls.",
+            },
+        },
+        "additionalProperties": False,
+    },
+    annotations=_WRITE,
+)
+def handle_create_hook(request_id, arguments):
+    base_url, _ = _ensure_connection(request_id)
+    if not base_url:
+        return
+    body = {
+        "name": arguments["name"],
+        "type": arguments["type"],
+        "events": arguments["events"],
+        "config": arguments["config"],
+        "active": arguments.get("active", True),
+        "queues": [f"{base_url}/api/v1/queues/{qid}" for qid in arguments.get("queue_ids", [])],
+    }
+    if "run_after" in arguments:
+        body["run_after"] = [f"{base_url}/api/v1/hooks/{hid}" for hid in arguments["run_after"]]
+    if "sideload" in arguments:
+        body["sideload"] = arguments["sideload"]
+    if "token_owner" in arguments:
+        body["token_owner"] = f"{base_url}/api/v1/users/{arguments['token_owner']}"
+    _rossum_post(request_id, "/api/v1/hooks", body)
 
 
 @_tool(

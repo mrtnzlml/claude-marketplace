@@ -131,6 +131,7 @@ class TestToolRegistration:
             "rossum_get_queue",
             "rossum_list_hooks",
             "rossum_get_hook",
+            "rossum_create_hook",
             "rossum_get_schema",
             "rossum_list_schemas",
             "rossum_list_workspaces",
@@ -147,7 +148,7 @@ class TestToolRegistration:
         assert set(server.TOOLS.keys()) == set(server.HANDLERS.keys())
 
     def test_annotations(self):
-        write_tools = {"data_storage_create_index", "data_storage_create_search_index"}
+        write_tools = {"data_storage_create_index", "data_storage_create_search_index", "rossum_create_hook"}
         destructive_tools = {"data_storage_drop_index", "data_storage_drop_search_index"}
         for name, tool_def in server.TOOLS.items():
             ann = tool_def.get("annotations", {})
@@ -606,6 +607,62 @@ class TestRossumApiTools:
         assert data["config"]["code"] == "def rossum_hook(...):"
         assert "/hooks/5" in m.call_args[0][0].full_url
 
+    def test_create_hook_function(self, capture):
+        _set_connected()
+        created = {"id": 99, "name": "Test", "type": "function", "active": True}
+        with _mock_urlopen(created) as m:
+            server.handle_create_hook("req-1", {
+                "name": "Test",
+                "type": "function",
+                "events": ["annotation_content.initialize"],
+                "config": {"runtime": "python3.12", "code": "def rossum_hook_request_handler(payload): return payload"},
+            })
+        body = json.loads(m.call_args[0][0].data)
+        assert body["name"] == "Test"
+        assert body["type"] == "function"
+        assert body["events"] == ["annotation_content.initialize"]
+        assert body["active"] is True
+        assert body["queues"] == []
+        assert "/hooks" in m.call_args[0][0].full_url
+        assert m.call_args[0][0].method == "POST"
+
+    def test_create_hook_webhook_with_queues(self, capture):
+        _set_connected()
+        created = {"id": 100, "name": "Export WH", "type": "webhook"}
+        with _mock_urlopen(created) as m:
+            server.handle_create_hook("req-1", {
+                "name": "Export WH",
+                "type": "webhook",
+                "events": ["annotation_content.export"],
+                "config": {"url": "https://example.com/hook"},
+                "queue_ids": [10, 20],
+                "run_after": [5],
+                "token_owner": 42,
+                "active": False,
+            })
+        body = json.loads(m.call_args[0][0].data)
+        assert body["type"] == "webhook"
+        assert body["active"] is False
+        assert body["queues"] == [
+            "https://example.rossum.ai/api/v1/queues/10",
+            "https://example.rossum.ai/api/v1/queues/20",
+        ]
+        assert body["run_after"] == ["https://example.rossum.ai/api/v1/hooks/5"]
+        assert body["token_owner"] == "https://example.rossum.ai/api/v1/users/42"
+
+    def test_create_hook_with_sideload(self, capture):
+        _set_connected()
+        with _mock_urlopen({"id": 101}) as m:
+            server.handle_create_hook("req-1", {
+                "name": "With sideload",
+                "type": "function",
+                "events": ["annotation_content.updated"],
+                "config": {"runtime": "python3.12", "code": "pass"},
+                "sideload": ["schemas"],
+            })
+        body = json.loads(m.call_args[0][0].data)
+        assert body["sideload"] == ["schemas"]
+
     def test_get_schema(self, capture):
         _set_connected()
         with _mock_urlopen({"id": 5, "content": [{"category": "section"}]}):
@@ -725,6 +782,7 @@ class TestRossumApiTools:
             (server.handle_get_queue, {"queue_id": 1}),
             (server.handle_list_hooks, {}),
             (server.handle_get_hook, {"hook_id": 1}),
+            (server.handle_create_hook, {"name": "t", "type": "function", "events": [], "config": {}}),
             (server.handle_get_schema, {"schema_id": 1}),
             (server.handle_list_schemas, {}),
             (server.handle_list_workspaces, {}),
@@ -779,7 +837,7 @@ class TestMainLoop:
         tools_by_name = {t["name"]: t for t in responses[0]["result"]["tools"]}
 
         # Write (non-destructive)
-        for name in ("data_storage_create_index", "data_storage_create_search_index"):
+        for name in ("data_storage_create_index", "data_storage_create_search_index", "rossum_create_hook"):
             ann = tools_by_name[name]["annotations"]
             assert ann["readOnlyHint"] is False, f"{name} readOnlyHint"
             assert ann["destructiveHint"] is False, f"{name} destructiveHint"
