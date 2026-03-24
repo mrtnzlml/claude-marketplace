@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""MCP server for Rossum APIs (read-only)."""
+"""MCP server for Rossum APIs."""
 
 import json
 import ssl
@@ -192,10 +192,17 @@ TOOLS = {}
 HANDLERS = {}
 
 
-def _tool(name, description, schema):
+_READ_ONLY = {"readOnlyHint": True}
+_WRITE = {"readOnlyHint": False, "destructiveHint": False}
+
+
+def _tool(name, description, schema, annotations=None):
     """Decorator: register a tool definition and its handler together."""
     def decorator(handler):
-        TOOLS[name] = {"name": name, "description": description, "inputSchema": schema}
+        tool_def = {"name": name, "description": description, "inputSchema": schema}
+        if annotations:
+            tool_def["annotations"] = annotations
+        TOOLS[name] = tool_def
         HANDLERS[name] = handler
         return handler
     return decorator
@@ -225,6 +232,7 @@ def _tool(name, description, schema):
         },
         "additionalProperties": False,
     },
+    annotations=_READ_ONLY,
 )
 def handle_set_token(request_id, arguments):
     global _cached_base_url, _cached_token, _token_validated
@@ -269,6 +277,7 @@ def handle_set_token(request_id, arguments):
         },
         "additionalProperties": False,
     },
+    annotations=_READ_ONLY,
 )
 def handle_healthz(request_id, arguments):
     raw_url = arguments.get("baseUrl", "")
@@ -301,6 +310,7 @@ def handle_healthz(request_id, arguments):
         },
         "additionalProperties": False,
     },
+    annotations=_READ_ONLY,
 )
 def handle_list_collections(request_id, arguments):
     body = {}
@@ -331,6 +341,7 @@ def handle_list_collections(request_id, arguments):
         },
         "additionalProperties": False,
     },
+    annotations=_READ_ONLY,
 )
 def handle_aggregate(request_id, arguments):
     body = {"pipeline": arguments.get("pipeline", []), "collectionName": arguments["collectionName"]}
@@ -358,7 +369,7 @@ def _handle_index_list(request_id, arguments, path):
     return _data_storage_call(request_id, path, body)
 
 
-@_tool("data_storage_list_indexes", "Lists all indexes of a Rossum Data Storage collection.", _INDEX_LIST_SCHEMA)
+@_tool("data_storage_list_indexes", "Lists all indexes of a Rossum Data Storage collection.", _INDEX_LIST_SCHEMA, annotations=_READ_ONLY)
 def handle_list_indexes(request_id, arguments):
     return _handle_index_list(request_id, arguments, "/v1/indexes/list")
 
@@ -367,9 +378,71 @@ def handle_list_indexes(request_id, arguments):
     "data_storage_list_search_indexes",
     "Lists all Atlas Search indexes of a Rossum Data Storage collection.",
     _INDEX_LIST_SCHEMA,
+    annotations=_READ_ONLY,
 )
 def handle_list_search_indexes(request_id, arguments):
     return _handle_index_list(request_id, arguments, "/v1/search_indexes/list")
+
+
+@_tool(
+    "data_storage_create_index",
+    "Creates a database index on a Rossum Data Storage collection. "
+    "This is a write operation that modifies the collection's index configuration.",
+    {
+        "type": "object",
+        "required": ["collectionName", "keys"],
+        "properties": {
+            "collectionName": {"type": "string", "description": "The name of the collection."},
+            "keys": {
+                "type": "object",
+                "description": (
+                    "Index key specification. Keys are field paths, values are "
+                    "1 (ascending), -1 (descending), or 'text'."
+                ),
+            },
+            "options": {
+                "type": "object",
+                "description": "Index options (e.g. name, unique, sparse, expireAfterSeconds).",
+            },
+        },
+        "additionalProperties": False,
+    },
+    annotations=_WRITE,
+)
+def handle_create_index(request_id, arguments):
+    body = {"collectionName": arguments["collectionName"], "keys": arguments["keys"]}
+    if "options" in arguments:
+        body["options"] = arguments["options"]
+    return _data_storage_call(request_id, "/v1/indexes/create", body)
+
+
+@_tool(
+    "data_storage_create_search_index",
+    "Creates an Atlas Search index on a Rossum Data Storage collection. "
+    "This is a write operation that modifies the collection's search index configuration.",
+    {
+        "type": "object",
+        "required": ["collectionName", "definition"],
+        "properties": {
+            "collectionName": {"type": "string", "description": "The name of the collection."},
+            "definition": {
+                "type": "object",
+                "description": "Atlas Search index definition including mappings and optional analyzers.",
+            },
+            "name": {
+                "type": "string",
+                "description": "Name for the search index. Defaults to 'default' if not specified.",
+            },
+        },
+        "additionalProperties": False,
+    },
+    annotations=_WRITE,
+)
+def handle_create_search_index(request_id, arguments):
+    body = {"collectionName": arguments["collectionName"], "definition": arguments["definition"]}
+    if "name" in arguments:
+        body["name"] = arguments["name"]
+    return _data_storage_call(request_id, "/v1/search_indexes/create", body)
 
 
 _USER_FIELDS = ("id", "email", "first_name", "last_name", "is_active")
@@ -385,6 +458,7 @@ _USER_FIELDS = ("id", "email", "first_name", "last_name", "is_active")
         },
         "additionalProperties": False,
     },
+    annotations=_READ_ONLY,
 )
 def handle_list_users(request_id, arguments):
     base_url, _ = _ensure_connection(request_id)
@@ -442,6 +516,7 @@ def handle_list_users(request_id, arguments):
         },
         "additionalProperties": False,
     },
+    annotations=_READ_ONLY,
 )
 def handle_list_audit_logs(request_id, arguments):
     base_url, _ = _ensure_connection(request_id)
@@ -490,6 +565,7 @@ def handle_list_audit_logs(request_id, arguments):
         },
         "additionalProperties": False,
     },
+    annotations=_READ_ONLY,
 )
 def handle_get_hook_secret_keys(request_id, arguments):
     base_url, _ = _ensure_connection(request_id)
@@ -517,6 +593,7 @@ def handle_get_hook_secret_keys(request_id, arguments):
         },
         "additionalProperties": False,
     },
+    annotations=_READ_ONLY,
 )
 def handle_get_annotation_content(request_id, arguments):
     base_url, _ = _ensure_connection(request_id)

@@ -18,7 +18,7 @@ Skills, references, and MCP tools for Rossum implementations.
 
 Autoloaded references: Rossum platform, MongoDB, Master Data Hub, Data Storage API, TxScript & Serverless Functions, SAP Integration, prd2 CLI.
 
-MCP server (`rossum-api`): read-only access to Rossum APIs and Data Storage. Starts automatically when the plugin is enabled.
+MCP server (`rossum-api`): access to Rossum APIs and Data Storage. Read-only tools are auto-approved; write tools (index creation) require explicit user approval via MCP tool annotations. Starts automatically when the plugin is enabled.
 
 ### `rossum`
 
