@@ -28,6 +28,35 @@ Document processing for transactional workflows.
 |-------|-------------|
 | `/rossum:document-processing` | Extract structured data from invoices, POs, and receipts with validation and anomaly detection |
 
+## Installation
+
+```bash
+# Add the marketplace
+/plugin marketplace add mrtnzlml/claude-marketplace
+
+# Install a plugin
+/plugin install rossum-sa@mrtnzlml-claude-marketplace
+/plugin install rossum@mrtnzlml-claude-marketplace
+```
+
+Test locally:
+
+```bash
+claude --plugin-dir /path/to/claude-marketplace/plugins/rossum-sa
+claude --plugin-dir /path/to/claude-marketplace/plugins/rossum
+```
+
+Per-project (`.claude/settings.json`):
+
+```json
+{
+  "enabledPlugins": [
+    "rossum-sa@mrtnzlml-claude-marketplace",
+    "rossum@mrtnzlml-claude-marketplace"
+  ]
+}
+```
+
 ## Prompt examples
 
 > *Take the fuzzy match (`$search`) present in the "MDH (PO/GRN positions, Entity, MoO)" extension and run it against the MDH collections to fine-tune the matching score (`__searchScore`). The goal is to return as accurate documents as possible while correctly filtering garbage out. Use at least 100 MDH samples.*
@@ -57,35 +86,6 @@ additions for an SA debugging implementations? If so, add them (with tests and R
 
 Token: <ROSSUM_API_TOKEN>
 Base URL: https://elis.rossum.ai
-```
-
-## Installation
-
-```bash
-# Add the marketplace
-/plugin marketplace add mrtnzlml/claude-marketplace
-
-# Install a plugin
-/plugin install rossum-sa@mrtnzlml-claude-marketplace
-/plugin install rossum@mrtnzlml-claude-marketplace
-```
-
-Test locally:
-
-```bash
-claude --plugin-dir /path/to/claude-marketplace/plugins/rossum-sa
-claude --plugin-dir /path/to/claude-marketplace/plugins/rossum
-```
-
-Per-project (`.claude/settings.json`):
-
-```json
-{
-  "enabledPlugins": [
-    "rossum-sa@mrtnzlml-claude-marketplace",
-    "rossum@mrtnzlml-claude-marketplace"
-  ]
-}
 ```
 
 ## MCP tools (`rossum-api`)
