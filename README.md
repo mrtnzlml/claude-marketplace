@@ -36,6 +36,29 @@ Document processing for transactional workflows.
 
 > *Are all indexes and search indexes set correctly on this project?*
 
+### MCP tool integration test
+
+```
+Call rossum_set_token with the provided token and base URL, then systematically test every MCP tool
+against the live API. For each tool:
+
+1. Call it with valid arguments derived from real data (use IDs from list endpoints to feed into
+   get endpoints; use existing collection names for Data Storage calls).
+2. For write/destructive tools (create_index, create_search_index, update_search_index, drop_index,
+   drop_search_index): create a temporary test resource, verify it exists, then clean it up.
+3. Record pass/fail for each tool.
+
+If a tool fails, diagnose whether the bug is in the server code (wrong field names, incorrect API path,
+bad request body shape) or a real API error. Fix server bugs in-place — update server.py, server_test.py,
+and README.md in the same pass. Run `pytest` after every fix.
+
+After all tools pass, evaluate coverage gaps: are there Rossum API endpoints that would be high-value
+additions for an SA debugging implementations? If so, add them (with tests and README updates).
+
+Token: <ROSSUM_API_TOKEN>
+Base URL: https://elis.rossum.ai
+```
+
 ## Installation
 
 ```bash
@@ -74,13 +97,22 @@ Per-project (`.claude/settings.json`):
 | `rossum_whoami` | Show authenticated user, organization, and role |
 | **Rossum API** | |
 | `rossum_list_workspaces` | List workspaces |
+| `rossum_get_workspace` | Get full workspace details |
 | `rossum_list_queues` | List queues (filter by workspace, status) |
 | `rossum_get_queue` | Get full queue details |
 | `rossum_get_schema` | Get queue schema (datapoints, sections, tables) |
+| `rossum_list_schemas` | List all schemas |
 | `rossum_list_hooks` | List hooks/extensions (filter by queue, active) |
 | `rossum_get_hook` | Get full hook details including code and config |
 | `rossum_get_hook_secret_keys` | List secret key names on a hook |
+| `rossum_list_annotations` | List annotations in a queue (filter by status) |
+| `rossum_get_annotation` | Get annotation metadata, messages, and state |
 | `rossum_get_annotation_content` | Get extracted data from an annotation |
+| `rossum_get_document` | Get document metadata (filename, MIME type) |
+| `rossum_get_inbox` | Get inbox details (email address, config) |
+| `rossum_list_connectors` | List export connectors (filter by queue) |
+| `rossum_get_connector` | Get full connector details |
+| `rossum_get_organization` | Get organization details and feature flags |
 | `rossum_list_users` | List organization users |
 | `rossum_list_audit_logs` | Query audit logs (admin only) |
 | **Data Storage** | |
@@ -92,7 +124,6 @@ Per-project (`.claude/settings.json`):
 | `data_storage_list_search_indexes` | List Atlas Search indexes |
 | `data_storage_create_index` | :pencil2: Create a database index |
 | `data_storage_create_search_index` | :pencil2: Create an Atlas Search index |
-| `data_storage_update_search_index` | :pencil2: Update an Atlas Search index definition |
 | `data_storage_drop_index` | :warning: Drop a database index |
 | `data_storage_drop_search_index` | :warning: Drop an Atlas Search index |
 

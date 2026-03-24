@@ -429,9 +429,10 @@ def handle_list_search_indexes(request_id, arguments):
     "This is a write operation that modifies the collection's index configuration.",
     {
         "type": "object",
-        "required": ["collectionName", "keys"],
+        "required": ["collectionName", "indexName", "keys"],
         "properties": {
             "collectionName": {"type": "string", "description": "The name of the collection."},
+            "indexName": {"type": "string", "description": "Name for the index."},
             "keys": {
                 "type": "object",
                 "description": (
@@ -441,7 +442,7 @@ def handle_list_search_indexes(request_id, arguments):
             },
             "options": {
                 "type": "object",
-                "description": "Index options (e.g. name, unique, sparse, expireAfterSeconds).",
+                "description": "Index options (e.g. unique, sparse, expireAfterSeconds).",
             },
         },
         "additionalProperties": False,
@@ -449,7 +450,11 @@ def handle_list_search_indexes(request_id, arguments):
     annotations=_WRITE,
 )
 def handle_create_index(request_id, arguments):
-    body = {"collectionName": arguments["collectionName"], "keys": arguments["keys"]}
+    body = {
+        "collectionName": arguments["collectionName"],
+        "indexName": arguments["indexName"],
+        "keys": arguments["keys"],
+    }
     if "options" in arguments:
         body["options"] = arguments["options"]
     return _data_storage_call(request_id, "/v1/indexes/create", body)
@@ -461,16 +466,21 @@ def handle_create_index(request_id, arguments):
     "This is a write operation that modifies the collection's search index configuration.",
     {
         "type": "object",
-        "required": ["collectionName", "definition"],
+        "required": ["collectionName", "mappings"],
         "properties": {
             "collectionName": {"type": "string", "description": "The name of the collection."},
-            "definition": {
+            "mappings": {
                 "type": "object",
-                "description": "Atlas Search index definition including mappings and optional analyzers.",
+                "description": "Atlas Search index mappings (e.g. {\"dynamic\": true}).",
             },
-            "name": {
+            "indexName": {
                 "type": "string",
                 "description": "Name for the search index. Defaults to 'default' if not specified.",
+            },
+            "analyzers": {
+                "type": "array",
+                "items": {"type": "object"},
+                "description": "Custom analyzer definitions for the search index.",
             },
         },
         "additionalProperties": False,
@@ -478,9 +488,11 @@ def handle_create_index(request_id, arguments):
     annotations=_WRITE,
 )
 def handle_create_search_index(request_id, arguments):
-    body = {"collectionName": arguments["collectionName"], "definition": arguments["definition"]}
-    if "name" in arguments:
-        body["name"] = arguments["name"]
+    body = {"collectionName": arguments["collectionName"], "mappings": arguments["mappings"]}
+    if "indexName" in arguments:
+        body["indexName"] = arguments["indexName"]
+    if "analyzers" in arguments:
+        body["analyzers"] = arguments["analyzers"]
     return _data_storage_call(request_id, "/v1/search_indexes/create", body)
 
 
@@ -512,10 +524,10 @@ def handle_drop_index(request_id, arguments):
     "This is a destructive write operation.",
     {
         "type": "object",
-        "required": ["collectionName", "name"],
+        "required": ["collectionName", "indexName"],
         "properties": {
             "collectionName": {"type": "string", "description": "The name of the collection."},
-            "name": {"type": "string", "description": "The name of the search index to drop."},
+            "indexName": {"type": "string", "description": "The name of the search index to drop."},
         },
         "additionalProperties": False,
     },
@@ -524,34 +536,7 @@ def handle_drop_index(request_id, arguments):
 def handle_drop_search_index(request_id, arguments):
     return _data_storage_call(request_id, "/v1/search_indexes/drop", {
         "collectionName": arguments["collectionName"],
-        "name": arguments["name"],
-    })
-
-
-@_tool(
-    "data_storage_update_search_index",
-    "Updates an existing Atlas Search index definition on a Rossum Data Storage collection. "
-    "This is a write operation that modifies the search index configuration.",
-    {
-        "type": "object",
-        "required": ["collectionName", "name", "definition"],
-        "properties": {
-            "collectionName": {"type": "string", "description": "The name of the collection."},
-            "name": {"type": "string", "description": "The name of the search index to update."},
-            "definition": {
-                "type": "object",
-                "description": "Updated Atlas Search index definition including mappings and optional analyzers.",
-            },
-        },
-        "additionalProperties": False,
-    },
-    annotations=_WRITE,
-)
-def handle_update_search_index(request_id, arguments):
-    return _data_storage_call(request_id, "/v1/search_indexes/update", {
-        "collectionName": arguments["collectionName"],
-        "name": arguments["name"],
-        "definition": arguments["definition"],
+        "indexName": arguments["indexName"],
     })
 
 
@@ -694,6 +679,49 @@ def handle_list_audit_logs(request_id, arguments):
 )
 def handle_get_hook_secret_keys(request_id, arguments):
     _rossum_get(request_id, f"/api/v1/hooks/{arguments['hook_id']}/secrets_keys")
+
+
+_ANNOTATION_FIELDS = ("id", "queue", "status", "document", "modifier", "modified_at", "confirmed_at", "exported_at")
+
+
+@_tool(
+    "rossum_list_annotations",
+    "Lists annotations in a queue. Annotations represent documents being processed. "
+    "Use this to find annotation IDs for rossum_get_annotation_content.",
+    {
+        "type": "object",
+        "required": ["queue"],
+        "properties": {
+            "queue": {
+                "type": "integer",
+                "description": "Queue ID to list annotations from.",
+            },
+            "status": {
+                "type": "string",
+                "description": (
+                    "Filter by status: 'to_review', 'reviewing', 'confirmed', "
+                    "'rejected', 'exporting', 'exported', 'failed_export', "
+                    "'postponed', 'deleted', 'purged', 'split', 'importing'."
+                ),
+            },
+            "max_results": {
+                "type": "integer",
+                "description": "Maximum annotations to return (default: 50, max: 500).",
+            },
+        },
+        "additionalProperties": False,
+    },
+    annotations=_READ_ONLY,
+)
+def handle_list_annotations(request_id, arguments):
+    max_results = min(arguments.get("max_results", 50), 500)
+    params = [("page_size", min(max_results, 100)), ("queue", arguments["queue"])]
+    if "status" in arguments:
+        params.append(("status", arguments["status"]))
+    _rossum_list(
+        request_id, "/api/v1/annotations", params,
+        max_results=max_results, pick_fields=_ANNOTATION_FIELDS,
+    )
 
 
 @_tool(
@@ -844,6 +872,24 @@ def handle_get_schema(request_id, arguments):
     _rossum_get(request_id, f"/api/v1/schemas/{arguments['schema_id']}")
 
 
+_SCHEMA_FIELDS = ("id", "name", "queues")
+
+
+@_tool(
+    "rossum_list_schemas",
+    "Lists all schemas in the Rossum organization. Schemas define the data structure "
+    "(fields, sections, tables) for document extraction in queues.",
+    {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": False,
+    },
+    annotations=_READ_ONLY,
+)
+def handle_list_schemas(request_id, arguments):
+    _rossum_list(request_id, "/api/v1/schemas", [("page_size", 100)], pick_fields=_SCHEMA_FIELDS)
+
+
 _WORKSPACE_FIELDS = ("id", "name", "organization", "queues", "autopilot")
 
 
@@ -868,6 +914,168 @@ def handle_list_workspaces(request_id, arguments):
     if "organization" in arguments:
         params.append(("organization", arguments["organization"]))
     _rossum_list(request_id, "/api/v1/workspaces", params, pick_fields=_WORKSPACE_FIELDS)
+
+
+@_tool(
+    "rossum_get_workspace",
+    "Retrieves full details of a single workspace including its queues, organization, "
+    "and autopilot settings. Use rossum_list_workspaces first to find workspace IDs.",
+    {
+        "type": "object",
+        "required": ["workspace_id"],
+        "properties": {
+            "workspace_id": {
+                "type": "integer",
+                "description": "The workspace ID.",
+            },
+        },
+        "additionalProperties": False,
+    },
+    annotations=_READ_ONLY,
+)
+def handle_get_workspace(request_id, arguments):
+    _rossum_get(request_id, f"/api/v1/workspaces/{arguments['workspace_id']}")
+
+
+@_tool(
+    "rossum_get_organization",
+    "Retrieves details of the organization including name, trial status, and feature flags. "
+    "The organization ID can be found in rossum_whoami output.",
+    {
+        "type": "object",
+        "required": ["organization_id"],
+        "properties": {
+            "organization_id": {
+                "type": "integer",
+                "description": "The organization ID.",
+            },
+        },
+        "additionalProperties": False,
+    },
+    annotations=_READ_ONLY,
+)
+def handle_get_organization(request_id, arguments):
+    _rossum_get(request_id, f"/api/v1/organizations/{arguments['organization_id']}")
+
+
+@_tool(
+    "rossum_get_document",
+    "Retrieves metadata of a document (original file name, MIME type, creation time, "
+    "annotations). Documents are referenced by annotations — extract the document ID "
+    "from the annotation's document URL.",
+    {
+        "type": "object",
+        "required": ["document_id"],
+        "properties": {
+            "document_id": {
+                "type": "integer",
+                "description": "The document ID.",
+            },
+        },
+        "additionalProperties": False,
+    },
+    annotations=_READ_ONLY,
+)
+def handle_get_document(request_id, arguments):
+    _rossum_get(request_id, f"/api/v1/documents/{arguments['document_id']}")
+
+
+_ANNOTATION_DETAIL_FIELDS = (
+    "id", "queue", "status", "document", "modifier", "modified_at", "confirmed_at",
+    "exported_at", "automated", "messages", "metadata", "created_at", "started_at",
+    "relations", "email",
+)
+
+
+@_tool(
+    "rossum_get_annotation",
+    "Retrieves full metadata of a single annotation including status, messages (validation "
+    "errors and automation blockers), metadata (hook state flags), timestamps, and email info. "
+    "Use rossum_list_annotations first to find annotation IDs.",
+    {
+        "type": "object",
+        "required": ["annotation_id"],
+        "properties": {
+            "annotation_id": {
+                "type": "integer",
+                "description": "The annotation ID.",
+            },
+        },
+        "additionalProperties": False,
+    },
+    annotations=_READ_ONLY,
+)
+def handle_get_annotation(request_id, arguments):
+    _rossum_get(request_id, f"/api/v1/annotations/{arguments['annotation_id']}")
+
+
+@_tool(
+    "rossum_get_inbox",
+    "Retrieves details of a queue's inbox including email address, bounce email, "
+    "and document processing settings. The inbox ID is found in the queue detail response.",
+    {
+        "type": "object",
+        "required": ["inbox_id"],
+        "properties": {
+            "inbox_id": {
+                "type": "integer",
+                "description": "The inbox ID.",
+            },
+        },
+        "additionalProperties": False,
+    },
+    annotations=_READ_ONLY,
+)
+def handle_get_inbox(request_id, arguments):
+    _rossum_get(request_id, f"/api/v1/inboxes/{arguments['inbox_id']}")
+
+
+_CONNECTOR_FIELDS = ("id", "name", "queues", "service_url", "authorization_type", "asynchronous")
+
+
+@_tool(
+    "rossum_list_connectors",
+    "Lists all connectors (export integrations) in the Rossum organization. "
+    "Connectors define where confirmed documents are exported to.",
+    {
+        "type": "object",
+        "properties": {
+            "queue": {
+                "type": "integer",
+                "description": "Filter by queue ID.",
+            },
+        },
+        "additionalProperties": False,
+    },
+    annotations=_READ_ONLY,
+)
+def handle_list_connectors(request_id, arguments):
+    params = [("page_size", 100)]
+    if "queue" in arguments:
+        params.append(("queue", arguments["queue"]))
+    _rossum_list(request_id, "/api/v1/connectors", params, pick_fields=_CONNECTOR_FIELDS)
+
+
+@_tool(
+    "rossum_get_connector",
+    "Retrieves full details of a single connector (export integration) including "
+    "service URL, authorization, parameters, and queue mapping. "
+    "Use rossum_list_connectors first to find connector IDs.",
+    {
+        "type": "object",
+        "required": ["connector_id"],
+        "properties": {
+            "connector_id": {
+                "type": "integer",
+                "description": "The connector ID.",
+            },
+        },
+        "additionalProperties": False,
+    },
+    annotations=_READ_ONLY,
+)
+def handle_get_connector(request_id, arguments):
+    _rossum_get(request_id, f"/api/v1/connectors/{arguments['connector_id']}")
 
 
 # --- Main loop ---

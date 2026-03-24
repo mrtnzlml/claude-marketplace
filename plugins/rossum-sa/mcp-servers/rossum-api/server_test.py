@@ -121,17 +121,25 @@ class TestToolRegistration:
             "data_storage_create_search_index",
             "data_storage_drop_index",
             "data_storage_drop_search_index",
-            "data_storage_update_search_index",
             "rossum_list_users",
             "rossum_list_audit_logs",
             "rossum_get_hook_secret_keys",
+            "rossum_list_annotations",
+            "rossum_get_annotation",
             "rossum_get_annotation_content",
             "rossum_list_queues",
             "rossum_get_queue",
             "rossum_list_hooks",
             "rossum_get_hook",
             "rossum_get_schema",
+            "rossum_list_schemas",
             "rossum_list_workspaces",
+            "rossum_get_workspace",
+            "rossum_get_organization",
+            "rossum_get_document",
+            "rossum_get_inbox",
+            "rossum_list_connectors",
+            "rossum_get_connector",
         }
         assert set(server.TOOLS.keys()) == expected
 
@@ -139,7 +147,7 @@ class TestToolRegistration:
         assert set(server.TOOLS.keys()) == set(server.HANDLERS.keys())
 
     def test_annotations(self):
-        write_tools = {"data_storage_create_index", "data_storage_create_search_index", "data_storage_update_search_index"}
+        write_tools = {"data_storage_create_index", "data_storage_create_search_index"}
         destructive_tools = {"data_storage_drop_index", "data_storage_drop_search_index"}
         for name, tool_def in server.TOOLS.items():
             ann = tool_def.get("annotations", {})
@@ -421,19 +429,26 @@ class TestDataStorageTools:
 
     def test_create_index(self, capture):
         _set_connected()
-        with _mock_urlopen({"ok": True}):
-            server.handle_create_index("req-1", {"collectionName": "test", "keys": {"field": 1}})
+        with _mock_urlopen({"ok": True}) as m:
+            server.handle_create_index("req-1", {
+                "collectionName": "test", "indexName": "field_1", "keys": {"field": 1},
+            })
         assert not capture.last_is_error
+        body = json.loads(m.call_args[0][0].data)
+        assert body["indexName"] == "field_1"
 
     def test_create_search_index(self, capture):
         _set_connected()
-        with _mock_urlopen({"ok": True}):
+        with _mock_urlopen({"ok": True}) as m:
             server.handle_create_search_index("req-1", {
                 "collectionName": "test",
-                "definition": {"mappings": {"dynamic": True}},
-                "name": "my_index",
+                "mappings": {"dynamic": True},
+                "indexName": "my_index",
             })
         assert not capture.last_is_error
+        body = json.loads(m.call_args[0][0].data)
+        assert body["indexName"] == "my_index"
+        assert body["mappings"] == {"dynamic": True}
 
     def test_drop_index(self, capture):
         _set_connected()
@@ -443,19 +458,11 @@ class TestDataStorageTools:
 
     def test_drop_search_index(self, capture):
         _set_connected()
-        with _mock_urlopen({"ok": True}):
-            server.handle_drop_search_index("req-1", {"collectionName": "test", "name": "default"})
+        with _mock_urlopen({"ok": True}) as m:
+            server.handle_drop_search_index("req-1", {"collectionName": "test", "indexName": "default"})
         assert not capture.last_is_error
-
-    def test_update_search_index(self, capture):
-        _set_connected()
-        with _mock_urlopen({"ok": True}):
-            server.handle_update_search_index("req-1", {
-                "collectionName": "test",
-                "name": "default",
-                "definition": {"mappings": {"dynamic": False}},
-            })
-        assert not capture.last_is_error
+        body = json.loads(m.call_args[0][0].data)
+        assert body["indexName"] == "default"
 
     def test_find(self, capture):
         _set_connected()
@@ -527,6 +534,27 @@ class TestRossumApiTools:
             server.handle_get_hook_secret_keys("req-1", {"hook_id": 42})
         assert "SECRET_1" in capture.last_text
 
+    def test_list_annotations(self, capture):
+        _set_connected()
+        annotations = [{"id": 100, "queue": "https://api/queues/10", "status": "to_review",
+                        "document": "https://api/documents/1", "modifier": None,
+                        "modified_at": "2026-01-01T00:00:00Z", "confirmed_at": None,
+                        "exported_at": None, "extra": "ignored"}]
+        with self._mock_list_response(annotations):
+            server.handle_list_annotations("req-1", {"queue": 10})
+        data = json.loads(capture.last_text)
+        assert data["total"] == 1
+        assert data["results"][0]["status"] == "to_review"
+        assert "extra" not in data["results"][0]
+
+    def test_list_annotations_filter(self, capture):
+        _set_connected()
+        with self._mock_list_response([]) as m:
+            server.handle_list_annotations("req-1", {"queue": 10, "status": "exported", "max_results": 5})
+        call_url = m.call_args[0][0].full_url
+        assert "queue=10" in call_url
+        assert "status=exported" in call_url
+
     def test_get_annotation_content(self, capture):
         _set_connected()
         with _mock_urlopen({"content": [{"category": "section_header"}]}):
@@ -585,6 +613,15 @@ class TestRossumApiTools:
         data = json.loads(capture.last_text)
         assert data["id"] == 5
 
+    def test_list_schemas(self, capture):
+        _set_connected()
+        schemas = [{"id": 5, "name": "Tax invoices", "queues": ["https://api/queues/10"], "extra": "ignored"}]
+        with self._mock_list_response(schemas):
+            server.handle_list_schemas("req-1", {})
+        data = json.loads(capture.last_text)
+        assert data["results"][0]["name"] == "Tax invoices"
+        assert "extra" not in data["results"][0]
+
     def test_list_workspaces(self, capture):
         _set_connected()
         workspaces = [{"id": 1, "name": "Production", "organization": "https://api/orgs/1",
@@ -595,6 +632,76 @@ class TestRossumApiTools:
         assert data["results"][0]["name"] == "Production"
         assert "extra" not in data["results"][0]
 
+    def test_get_workspace(self, capture):
+        _set_connected()
+        with _mock_urlopen({"id": 1, "name": "Production", "queues": []}) as m:
+            server.handle_get_workspace("req-1", {"workspace_id": 1})
+        data = json.loads(capture.last_text)
+        assert data["name"] == "Production"
+        assert "/workspaces/1" in m.call_args[0][0].full_url
+
+    def test_get_organization(self, capture):
+        _set_connected()
+        with _mock_urlopen({"id": 42, "name": "Acme Corp", "is_trial": False}) as m:
+            server.handle_get_organization("req-1", {"organization_id": 42})
+        data = json.loads(capture.last_text)
+        assert data["name"] == "Acme Corp"
+        assert "/organizations/42" in m.call_args[0][0].full_url
+
+    def test_get_document(self, capture):
+        _set_connected()
+        with _mock_urlopen({"id": 99, "original_file_name": "invoice.pdf", "mime_type": "application/pdf"}) as m:
+            server.handle_get_document("req-1", {"document_id": 99})
+        data = json.loads(capture.last_text)
+        assert data["original_file_name"] == "invoice.pdf"
+        assert "/documents/99" in m.call_args[0][0].full_url
+
+    def test_get_annotation(self, capture):
+        _set_connected()
+        ann_data = {"id": 100, "status": "exported", "messages": [], "metadata": {"export_id": "abc"}}
+        with _mock_urlopen(ann_data) as m:
+            server.handle_get_annotation("req-1", {"annotation_id": 100})
+        data = json.loads(capture.last_text)
+        assert data["status"] == "exported"
+        assert data["metadata"]["export_id"] == "abc"
+        assert "/annotations/100" in m.call_args[0][0].full_url
+
+    def test_get_inbox(self, capture):
+        _set_connected()
+        inbox_data = {"id": 50, "email": "invoices-xyz@elis.rossum.ai", "queues": ["https://api/queues/10"]}
+        with _mock_urlopen(inbox_data) as m:
+            server.handle_get_inbox("req-1", {"inbox_id": 50})
+        data = json.loads(capture.last_text)
+        assert data["email"] == "invoices-xyz@elis.rossum.ai"
+        assert "/inboxes/50" in m.call_args[0][0].full_url
+
+    def test_list_connectors(self, capture):
+        _set_connected()
+        connectors = [{"id": 3, "name": "SAP Export", "queues": ["https://api/queues/10"],
+                       "service_url": "https://example.com/export", "authorization_type": "token",
+                       "asynchronous": False, "extra": "ignored"}]
+        with self._mock_list_response(connectors):
+            server.handle_list_connectors("req-1", {})
+        data = json.loads(capture.last_text)
+        assert data["results"][0]["name"] == "SAP Export"
+        assert "extra" not in data["results"][0]
+
+    def test_list_connectors_filter(self, capture):
+        _set_connected()
+        with self._mock_list_response([]) as m:
+            server.handle_list_connectors("req-1", {"queue": 10})
+        call_url = m.call_args[0][0].full_url
+        assert "queue=10" in call_url
+
+    def test_get_connector(self, capture):
+        _set_connected()
+        connector_data = {"id": 3, "name": "SAP Export", "service_url": "https://example.com/export"}
+        with _mock_urlopen(connector_data) as m:
+            server.handle_get_connector("req-1", {"connector_id": 3})
+        data = json.loads(capture.last_text)
+        assert data["name"] == "SAP Export"
+        assert "/connectors/3" in m.call_args[0][0].full_url
+
     def test_tools_require_connection(self, capture):
         """All authenticated tools should fail gracefully when not connected."""
         authenticated_handlers = [
@@ -604,21 +711,29 @@ class TestRossumApiTools:
             (server.handle_find, {"collectionName": "c"}),
             (server.handle_list_indexes, {"collectionName": "c"}),
             (server.handle_list_search_indexes, {"collectionName": "c"}),
-            (server.handle_create_index, {"collectionName": "c", "keys": {"f": 1}}),
-            (server.handle_create_search_index, {"collectionName": "c", "definition": {}}),
+            (server.handle_create_index, {"collectionName": "c", "indexName": "x", "keys": {"f": 1}}),
+            (server.handle_create_search_index, {"collectionName": "c", "mappings": {}}),
             (server.handle_drop_index, {"collectionName": "c", "indexName": "x"}),
-            (server.handle_drop_search_index, {"collectionName": "c", "name": "x"}),
-            (server.handle_update_search_index, {"collectionName": "c", "name": "x", "definition": {}}),
+            (server.handle_drop_search_index, {"collectionName": "c", "indexName": "x"}),
             (server.handle_list_users, {}),
             (server.handle_list_audit_logs, {"object_type": "user"}),
             (server.handle_get_hook_secret_keys, {"hook_id": 1}),
+            (server.handle_list_annotations, {"queue": 1}),
+            (server.handle_get_annotation, {"annotation_id": 1}),
             (server.handle_get_annotation_content, {"annotation_id": 1}),
             (server.handle_list_queues, {}),
             (server.handle_get_queue, {"queue_id": 1}),
             (server.handle_list_hooks, {}),
             (server.handle_get_hook, {"hook_id": 1}),
             (server.handle_get_schema, {"schema_id": 1}),
+            (server.handle_list_schemas, {}),
             (server.handle_list_workspaces, {}),
+            (server.handle_get_workspace, {"workspace_id": 1}),
+            (server.handle_get_organization, {"organization_id": 1}),
+            (server.handle_get_document, {"document_id": 1}),
+            (server.handle_get_inbox, {"inbox_id": 1}),
+            (server.handle_list_connectors, {}),
+            (server.handle_get_connector, {"connector_id": 1}),
         ]
         for handler, args in authenticated_handlers:
             capture.messages.clear()
@@ -664,7 +779,7 @@ class TestMainLoop:
         tools_by_name = {t["name"]: t for t in responses[0]["result"]["tools"]}
 
         # Write (non-destructive)
-        for name in ("data_storage_create_index", "data_storage_create_search_index", "data_storage_update_search_index"):
+        for name in ("data_storage_create_index", "data_storage_create_search_index"):
             ann = tools_by_name[name]["annotations"]
             assert ann["readOnlyHint"] is False, f"{name} readOnlyHint"
             assert ann["destructiveHint"] is False, f"{name} destructiveHint"
