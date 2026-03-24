@@ -20,13 +20,13 @@ Autoloaded references: Rossum platform, MongoDB, Master Data Hub, Data Storage A
 
 MCP server (`rossum-api`) — starts automatically when the plugin is enabled. Write tools require explicit user approval. See [MCP tools](#mcp-tools-rossum-api) below.
 
-### `rossum`
+### `nerossum`
 
-Document processing for transactional workflows.
+Document processing without Rossum — a fun demo that replicates Rossum-like extraction behavior using only Claude. No Rossum account needed.
 
 | Skill | Description |
 |-------|-------------|
-| `/rossum:document-processing` | Extract structured data from invoices, POs, and receipts with validation and anomaly detection |
+| `/nerossum:document-processing` | Extract structured data from invoices, POs, and receipts with validation and anomaly detection |
 
 ## Installation
 
@@ -36,14 +36,14 @@ Document processing for transactional workflows.
 
 # Install a plugin
 /plugin install rossum-sa@mrtnzlml-claude-marketplace
-/plugin install rossum@mrtnzlml-claude-marketplace
+/plugin install nerossum@mrtnzlml-claude-marketplace
 ```
 
 Test locally:
 
 ```bash
 claude --plugin-dir /path/to/claude-marketplace/plugins/rossum-sa
-claude --plugin-dir /path/to/claude-marketplace/plugins/rossum
+claude --plugin-dir /path/to/claude-marketplace/plugins/nerossum
 ```
 
 Per-project (`.claude/settings.json`):
@@ -52,7 +52,7 @@ Per-project (`.claude/settings.json`):
 {
   "enabledPlugins": [
     "rossum-sa@mrtnzlml-claude-marketplace",
-    "rossum@mrtnzlml-claude-marketplace"
+    "nerossum@mrtnzlml-claude-marketplace"
   ]
 }
 ```

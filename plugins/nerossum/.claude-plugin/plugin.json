@@ -1,0 +1,8 @@
+{
+  "name": "nerossum",
+  "description": "Document processing without Rossum — a fun demo that extracts, validates, and routes data from invoices, POs, and receipts using only Claude",
+  "version": "0.1.0",
+  "author": {
+    "name": "mrtnzlml"
+  }
+}
