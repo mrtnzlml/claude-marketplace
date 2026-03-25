@@ -2,7 +2,7 @@
 
 Turn Claude into a Rossum implementation partner — audit hooks, analyze schemas, query Data Storage, extract documents, and generate SOWs, all from your terminal.
 
-6 skills · 7 reference packs · 37 MCP tools — [Claude Code plugin marketplace](https://code.claude.com/docs/en/plugin-marketplaces) for Rossum.ai.
+7 skills · 7 reference packs · 37 MCP tools — [Claude Code plugin marketplace](https://code.claude.com/docs/en/plugin-marketplaces) for Rossum.ai.
 
 <!-- TODO: add a terminal demo GIF here (e.g. invoice extraction or hook audit) -->
 
@@ -14,6 +14,8 @@ You need [Claude Code CLI](https://code.claude.com/) and a Rossum API token.
 /plugin marketplace add mrtnzlml/claude-marketplace
 /plugin install rossum-sa@mrtnzlml-claude-marketplace
 ```
+
+Auto-updates are disabled by default for third-party marketplaces. To enable them, go to `/plugin` → **Marketplaces** tab and toggle auto-update on for this marketplace. Claude Code checks for updates at startup — new versions are detected when the plugin version is bumped.
 
 Then connect and go:
 
@@ -35,6 +37,7 @@ component (🟢 healthy, 🟡 warning, 🔴 broken).
 | `/rossum-sa:document [path]` | Produce a queue-focused reference document |
 | `/rossum-sa:implement` | Plan and execute an integration project end-to-end |
 | `/rossum-sa:upgrade [path]` | Upgrade deprecated extensions to modern formula fields |
+| `/rossum-sa:test [path]` | E2E test an implementation against the live environment |
 
 ### `nerossum`
 
