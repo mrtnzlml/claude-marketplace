@@ -15,8 +15,6 @@ You need [Claude Code CLI](https://code.claude.com/) and a Rossum API token.
 /plugin install rossum-sa@mrtnzlml-claude-marketplace
 ```
 
-Auto-updates are disabled by default for third-party marketplaces. To enable them, go to `/plugin` → **Marketplaces** tab and toggle auto-update on for this marketplace. Claude Code checks for updates at startup — new versions are detected when the plugin version is bumped.
-
 Then connect and go:
 
 ```
@@ -25,6 +23,8 @@ Map out the entire org — workspaces, queues, hooks, schemas — and draw
 an ASCII architecture diagram. Add emoji health indicators next to each
 component (🟢 healthy, 🟡 warning, 🔴 broken).
 ```
+
+> **Note:** Auto-updates are off by default for third-party marketplaces. Enable them in `/plugin` → **Marketplaces** tab.
 
 ## ⚡ Skills
 
