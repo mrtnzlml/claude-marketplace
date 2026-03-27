@@ -240,6 +240,28 @@ def _rossum_patch(request_id, path, body):
         tool_result(request_id, json.dumps(result, indent=2))
 
 
+def _paginate(request_id, url, *, max_results=None, pick_fields=None):
+    """Auto-paginate a Rossum list endpoint. Returns list of results or None on error."""
+    all_results = []
+    while url:
+        page = _http_request(request_id, url)
+        if page is None:
+            return None
+        for item in page.get("results", []):
+            if max_results and len(all_results) >= max_results:
+                break
+            all_results.append({k: item[k] for k in pick_fields if k in item} if pick_fields else item)
+        if max_results and len(all_results) >= max_results:
+            break
+        next_url = page.get("pagination", {}).get("next")
+        if not next_url:
+            break
+        if _validate_base_url(next_url) != _validate_base_url(url):
+            break
+        url = next_url
+    return all_results
+
+
 def _rossum_list(request_id, endpoint, params, *, pick_fields=None, max_results=None):
     """Paginate a Rossum API list endpoint and return collected results."""
     base_url, _ = _ensure_connection(request_id)
@@ -275,6 +297,32 @@ def _tool(name, description, schema, annotations=None):
         HANDLERS[name] = handler
         return handler
     return decorator
+
+
+# --- Field filters for list endpoints ---
+
+
+_USER_FIELDS = ("id", "email", "first_name", "last_name", "is_active")
+_HOOK_LOG_FIELDS = (
+    "hook_id", "annotation_id", "queue_id", "event", "action",
+    "status", "log_level", "message", "timestamp", "start", "end",
+)
+_ANNOTATION_FIELDS = ("id", "queue", "status", "document", "modifier", "modified_at", "confirmed_at", "exported_at")
+_QUEUE_FIELDS = ("id", "name", "workspace", "schema", "hooks", "status", "dedicated_engine")
+_HOOK_FIELDS = ("id", "name", "type", "events", "queues", "active", "run_after", "token_owner")
+_SCHEMA_FIELDS = ("id", "name", "queues")
+_WORKSPACE_FIELDS = ("id", "name", "organization", "queues", "autopilot")
+_CONNECTOR_FIELDS = ("id", "name", "queues", "service_url", "authorization_type", "asynchronous")
+_EMAIL_FIELDS = (
+    "id", "queue", "inbox", "subject", "from", "to", "cc", "bcc",
+    "type", "created_at", "documents", "annotations", "parent", "children",
+    "email_thread", "annotation_counts", "labels", "metadata",
+)
+_EMAIL_THREAD_FIELDS = (
+    "id", "queue", "root_email", "subject", "from", "has_replies",
+    "has_new_replies", "created_at", "last_email_created_at",
+    "annotation_counts", "labels",
+)
 
 
 # --- Tools ---
@@ -622,31 +670,6 @@ def handle_find(request_id, arguments):
     return _data_storage_call(request_id, "/v1/data/find", body)
 
 
-def _paginate(request_id, url, *, max_results=None, pick_fields=None):
-    """Auto-paginate a Rossum list endpoint. Returns list of results or None on error."""
-    all_results = []
-    while url:
-        page = _http_request(request_id, url)
-        if page is None:
-            return None
-        for item in page.get("results", []):
-            if max_results and len(all_results) >= max_results:
-                break
-            all_results.append({k: item[k] for k in pick_fields if k in item} if pick_fields else item)
-        if max_results and len(all_results) >= max_results:
-            break
-        next_url = page.get("pagination", {}).get("next")
-        if not next_url:
-            break
-        if _validate_base_url(next_url) != _validate_base_url(url):
-            break
-        url = next_url
-    return all_results
-
-
-_USER_FIELDS = ("id", "email", "first_name", "last_name", "is_active")
-
-
 @_tool(
     "rossum_list_groups",
     "Lists available user roles (groups) and their IDs. "
@@ -835,12 +858,6 @@ def handle_get_hook_secret_keys(request_id, arguments):
     _rossum_get(request_id, f"/api/v1/hooks/{arguments['hook_id']}/secrets_keys")
 
 
-_HOOK_LOG_FIELDS = (
-    "hook_id", "annotation_id", "queue_id", "event", "action",
-    "status", "log_level", "message", "timestamp", "start", "end",
-)
-
-
 @_tool(
     "rossum_list_hook_logs",
     "Lists recent hook execution logs. Essential for debugging hook failures — shows "
@@ -897,9 +914,6 @@ def handle_list_hook_logs(request_id, arguments):
         request_id, "/api/v1/hooks/logs", params,
         max_results=max_results, pick_fields=_HOOK_LOG_FIELDS,
     )
-
-
-_ANNOTATION_FIELDS = ("id", "queue", "status", "document", "modifier", "modified_at", "confirmed_at", "exported_at")
 
 
 @_tool(
@@ -1063,9 +1077,6 @@ def handle_get_annotation_content(request_id, arguments):
     _rossum_get(request_id, f"/api/v1/annotations/{arguments['annotation_id']}/content")
 
 
-_QUEUE_FIELDS = ("id", "name", "workspace", "schema", "hooks", "status", "dedicated_engine")
-
-
 @_tool(
     "rossum_list_queues",
     "Lists all queues in the Rossum organization. Queues are the core processing unit — "
@@ -1114,9 +1125,6 @@ def handle_list_queues(request_id, arguments):
 )
 def handle_get_queue(request_id, arguments):
     _rossum_get(request_id, f"/api/v1/queues/{arguments['queue_id']}")
-
-
-_HOOK_FIELDS = ("id", "name", "type", "events", "queues", "active", "run_after", "token_owner")
 
 
 @_tool(
@@ -1376,9 +1384,6 @@ def handle_get_schema(request_id, arguments):
     _rossum_get(request_id, f"/api/v1/schemas/{arguments['schema_id']}")
 
 
-_SCHEMA_FIELDS = ("id", "name", "queues")
-
-
 @_tool(
     "rossum_list_schemas",
     "Lists all schemas in the Rossum organization. Schemas define the data structure "
@@ -1392,9 +1397,6 @@ _SCHEMA_FIELDS = ("id", "name", "queues")
 )
 def handle_list_schemas(request_id, arguments):
     _rossum_list(request_id, "/api/v1/schemas", [("page_size", 100)], pick_fields=_SCHEMA_FIELDS)
-
-
-_WORKSPACE_FIELDS = ("id", "name", "organization", "queues", "autopilot")
 
 
 @_tool(
@@ -1484,13 +1486,6 @@ def handle_get_document(request_id, arguments):
     _rossum_get(request_id, f"/api/v1/documents/{arguments['document_id']}")
 
 
-_ANNOTATION_DETAIL_FIELDS = (
-    "id", "queue", "status", "document", "modifier", "modified_at", "confirmed_at",
-    "exported_at", "automated", "messages", "metadata", "created_at", "started_at",
-    "relations", "email",
-)
-
-
 @_tool(
     "rossum_get_annotation",
     "Retrieves full metadata of a single annotation including status, messages (validation "
@@ -1532,9 +1527,6 @@ def handle_get_annotation(request_id, arguments):
 )
 def handle_get_inbox(request_id, arguments):
     _rossum_get(request_id, f"/api/v1/inboxes/{arguments['inbox_id']}")
-
-
-_CONNECTOR_FIELDS = ("id", "name", "queues", "service_url", "authorization_type", "asynchronous")
 
 
 @_tool(
@@ -1580,13 +1572,6 @@ def handle_list_connectors(request_id, arguments):
 )
 def handle_get_connector(request_id, arguments):
     _rossum_get(request_id, f"/api/v1/connectors/{arguments['connector_id']}")
-
-
-_EMAIL_FIELDS = (
-    "id", "queue", "inbox", "subject", "from", "to", "cc", "bcc",
-    "type", "created_at", "documents", "annotations", "parent", "children",
-    "email_thread", "annotation_counts", "labels", "metadata",
-)
 
 
 @_tool(
@@ -1646,13 +1631,6 @@ def handle_list_emails(request_id, arguments):
 )
 def handle_get_email(request_id, arguments):
     _rossum_get(request_id, f"/api/v1/emails/{arguments['email_id']}")
-
-
-_EMAIL_THREAD_FIELDS = (
-    "id", "queue", "root_email", "subject", "from", "has_replies",
-    "has_new_replies", "created_at", "last_email_created_at",
-    "annotation_counts", "labels",
-)
 
 
 @_tool(
