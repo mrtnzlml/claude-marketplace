@@ -12,8 +12,13 @@ against the live API. For each tool:
 
 1. Call it with valid arguments derived from real data (use IDs from list endpoints to feed into
    get endpoints; use existing collection names for Data Storage calls).
-2. For write/destructive tools (create_index, create_search_index, drop_index, drop_search_index):
-   create a temporary test resource, verify it exists, then clean it up.
+2. For write/destructive tools, create a temporary test resource, verify it exists, then clean it up:
+   - Data Storage: create_index → list_indexes (verify) → drop_index;
+     create_search_index → list_search_indexes (verify) → drop_search_index.
+   - Hooks: create_hook → get_hook (verify) → patch_hook (change name/active) →
+     get_hook (verify patch) → delete_hook.
+   - Users: create_user (inactive, with a throwaway username) → list_users (verify) →
+     confirm the user appears. No delete endpoint exists, so set is_active=false on creation.
 3. Verify that list endpoints handle API pagination correctly (the Rossum API returns paginated
    responses with `pagination.next` URLs — confirm multi-page results are auto-collected).
 4. Record pass/fail for each tool.

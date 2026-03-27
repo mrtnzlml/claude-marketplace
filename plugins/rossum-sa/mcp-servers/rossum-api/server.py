@@ -230,6 +230,16 @@ def _rossum_delete(request_id, path):
         tool_result(request_id, f"Error: {e}", is_error=True)
 
 
+def _rossum_patch(request_id, path, body):
+    """PATCH a Rossum API resource and return the result as JSON."""
+    base_url, _ = _ensure_connection(request_id)
+    if not base_url:
+        return
+    result = _http_request(request_id, f"{base_url}{path}", method="PATCH", body=body)
+    if result is not None:
+        tool_result(request_id, json.dumps(result, indent=2))
+
+
 def _rossum_list(request_id, endpoint, params, *, pick_fields=None, max_results=None):
     """Paginate a Rossum API list endpoint and return collected results."""
     base_url, _ = _ensure_connection(request_id)
@@ -638,6 +648,21 @@ _USER_FIELDS = ("id", "email", "first_name", "last_name", "is_active")
 
 
 @_tool(
+    "rossum_list_groups",
+    "Lists available user roles (groups) and their IDs. "
+    "Use these IDs for the group_ids parameter when creating users.",
+    {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": False,
+    },
+    annotations=_READ_ONLY,
+)
+def handle_list_groups(request_id, arguments):
+    _rossum_list(request_id, "/api/v1/groups", [("page_size", 100)])
+
+
+@_tool(
     "rossum_list_users",
     "Lists all users in the Rossum organization. Auto-paginates to return every user.",
     {
@@ -654,6 +679,98 @@ def handle_list_users(request_id, arguments):
     if "is_active" in arguments:
         params.append(("is_active", "true" if arguments["is_active"] else "false"))
     _rossum_list(request_id, "/api/v1/users", params, pick_fields=_USER_FIELDS)
+
+
+@_tool(
+    "rossum_create_user",
+    "Creates a new user in the Rossum organization. "
+    "Use rossum_whoami to get the organization ID, rossum_list_groups to decide which group_ids to assign, "
+    "and rossum_list_users to verify the user was created.",
+    {
+        "type": "object",
+        "required": ["username", "first_name", "last_name", "organization_id", "group_ids"],
+        "properties": {
+            "username": {
+                "type": "string",
+                "description": "Login username (can be any string, does not have to be an email).",
+            },
+            "first_name": {
+                "type": "string",
+                "description": "User's first name.",
+            },
+            "last_name": {
+                "type": "string",
+                "description": "User's last name.",
+            },
+            "organization_id": {
+                "type": "integer",
+                "description": "Organization ID the user belongs to (from rossum_whoami).",
+            },
+            "password": {
+                "type": "string",
+                "description": "Initial password. If omitted, user must set password via activation email.",
+            },
+            "email": {
+                "type": "string",
+                "description": "User's email address.",
+            },
+            "group_ids": {
+                "type": "array",
+                "items": {"type": "integer"},
+                "description": "Group IDs for role assignment (e.g. organization admin, manager, annotator).",
+            },
+            "queue_ids": {
+                "type": "array",
+                "items": {"type": "integer"},
+                "description": "Queue IDs the user can access.",
+            },
+            "oidc_id": {
+                "type": "string",
+                "description": "OpenID Connect identifier for SSO users.",
+            },
+            "auth_type": {
+                "type": "string",
+                "description": "Authentication type (e.g. 'sso'). Omit for password-based auth.",
+            },
+            "is_active": {
+                "type": "boolean",
+                "description": "Whether the account is active (default: true).",
+            },
+            "metadata": {
+                "type": "object",
+                "description": "Custom JSON metadata (max 4 KB).",
+            },
+        },
+        "additionalProperties": False,
+    },
+    annotations=_WRITE,
+)
+def handle_create_user(request_id, arguments):
+    base_url, _ = _ensure_connection(request_id)
+    if not base_url:
+        return
+    body = {
+        "username": arguments["username"],
+        "first_name": arguments["first_name"],
+        "last_name": arguments["last_name"],
+        "organization": f"{base_url}/api/v1/organizations/{arguments['organization_id']}",
+    }
+    if "password" in arguments:
+        body["password"] = arguments["password"]
+    if "email" in arguments:
+        body["email"] = arguments["email"]
+    body["groups"] = [f"{base_url}/api/v1/groups/{gid}" for gid in arguments["group_ids"]]
+    if "queue_ids" in arguments:
+        body["queues"] = [f"{base_url}/api/v1/queues/{qid}" for qid in arguments["queue_ids"]]
+    if "oidc_id" in arguments:
+        body["oidc_id"] = arguments["oidc_id"]
+    if "auth_type" in arguments:
+        body["auth_type"] = arguments["auth_type"]
+    if "is_active" in arguments:
+        body["is_active"] = arguments["is_active"]
+    if "metadata" in arguments:
+        body["metadata"] = arguments["metadata"]
+    _rossum_post(request_id, "/api/v1/users", body)
 
 
 @_tool(
@@ -716,6 +833,70 @@ def handle_list_audit_logs(request_id, arguments):
 )
 def handle_get_hook_secret_keys(request_id, arguments):
     _rossum_get(request_id, f"/api/v1/hooks/{arguments['hook_id']}/secrets_keys")
+
+
+_HOOK_LOG_FIELDS = (
+    "hook_id", "annotation_id", "queue_id", "event", "action",
+    "status", "log_level", "message", "timestamp", "start", "end",
+)
+
+
+@_tool(
+    "rossum_list_hook_logs",
+    "Lists recent hook execution logs. Essential for debugging hook failures — shows "
+    "which hooks ran, their status (succeeded/failed/skipped), timing, and error messages. "
+    "Filter by hook ID, annotation, queue, status, or time range.",
+    {
+        "type": "object",
+        "properties": {
+            "hook": {
+                "type": "integer",
+                "description": "Filter by hook ID.",
+            },
+            "annotation": {
+                "type": "integer",
+                "description": "Filter by annotation ID.",
+            },
+            "queue": {
+                "type": "integer",
+                "description": "Filter by queue ID.",
+            },
+            "status": {
+                "type": "string",
+                "description": "Filter by execution status.",
+            },
+            "log_level": {
+                "type": "string",
+                "description": "Filter by log level.",
+            },
+            "timestamp_after": {
+                "type": "string",
+                "description": "Filter: logs after this ISO 8601 timestamp.",
+            },
+            "timestamp_before": {
+                "type": "string",
+                "description": "Filter: logs before this ISO 8601 timestamp.",
+            },
+            "max_results": {
+                "type": "integer",
+                "description": "Maximum entries to return (default: 20, max: 200).",
+            },
+        },
+        "additionalProperties": False,
+    },
+    annotations=_READ_ONLY,
+)
+def handle_list_hook_logs(request_id, arguments):
+    max_results = min(arguments.get("max_results", 20), 200)
+    params = [("page_size", min(max_results, 100))]
+    for key in ("hook", "annotation", "queue", "status", "log_level",
+                "timestamp_after", "timestamp_before"):
+        if key in arguments:
+            params.append((key, arguments[key]))
+    _rossum_list(
+        request_id, "/api/v1/hooks/logs", params,
+        max_results=max_results, pick_fields=_HOOK_LOG_FIELDS,
+    )
 
 
 _ANNOTATION_FIELDS = ("id", "queue", "status", "document", "modifier", "modified_at", "confirmed_at", "exported_at")
@@ -1093,6 +1274,85 @@ def handle_create_hook(request_id, arguments):
 )
 def handle_delete_hook(request_id, arguments):
     _rossum_delete(request_id, f"/api/v1/hooks/{arguments['hook_id']}")
+
+
+@_tool(
+    "rossum_patch_hook",
+    "Updates an existing hook (extension). Only provide the fields you want to change — "
+    "unspecified fields are left untouched. Use this to update hook code, toggle active state, "
+    "change events, or reassign queues without recreating the hook. This is a write operation.",
+    {
+        "type": "object",
+        "required": ["hook_id"],
+        "properties": {
+            "hook_id": {
+                "type": "integer",
+                "description": "The hook ID to update.",
+            },
+            "name": {
+                "type": "string",
+                "description": "New display name.",
+            },
+            "config": {
+                "type": "object",
+                "description": (
+                    "Updated config. For function hooks: {\"code\": \"...\"}. "
+                    "Only include keys you want to change."
+                ),
+            },
+            "events": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "Updated event triggers (replaces the full list).",
+            },
+            "active": {
+                "type": "boolean",
+                "description": "Enable or disable the hook.",
+            },
+            "queue_ids": {
+                "type": "array",
+                "items": {"type": "integer"},
+                "description": "Replace attached queues (full list, not additive).",
+            },
+            "run_after": {
+                "type": "array",
+                "items": {"type": "integer"},
+                "description": "Replace execution ordering dependencies.",
+            },
+            "sideload": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "Updated sideload configuration.",
+            },
+            "token_owner": {
+                "type": "integer",
+                "description": "User ID whose permissions the hook uses.",
+            },
+            "settings": {
+                "type": "object",
+                "description": "Updated hook settings.",
+            },
+        },
+        "additionalProperties": False,
+    },
+    annotations=_WRITE,
+)
+def handle_patch_hook(request_id, arguments):
+    base_url, _ = _ensure_connection(request_id)
+    if not base_url:
+        return
+    hook_id = arguments["hook_id"]
+    body = {}
+    for key in ("name", "config", "events", "active", "sideload", "settings"):
+        if key in arguments:
+            body[key] = arguments[key]
+    if "queue_ids" in arguments:
+        body["queues"] = [f"{base_url}/api/v1/queues/{qid}" for qid in arguments["queue_ids"]]
+    if "run_after" in arguments:
+        body["run_after"] = [f"{base_url}/api/v1/hooks/{hid}" for hid in arguments["run_after"]]
+    if "token_owner" in arguments:
+        body["token_owner"] = f"{base_url}/api/v1/users/{arguments['token_owner']}"
+    _rossum_patch(request_id, f"/api/v1/hooks/{hook_id}", body)
 
 
 @_tool(
