@@ -89,34 +89,6 @@ Connect to Rossum and compare schemas across all active queues. List fields that
 one schema but not another.
 ```
 
-<details>
-<summary><strong>🧪 MCP server self-test</strong> (for development/CI)</summary>
-
-```
-Call rossum_set_token with the provided token and base URL, then systematically test every MCP tool
-against the live API. For each tool:
-
-1. Call it with valid arguments derived from real data (use IDs from list endpoints to feed into
-   get endpoints; use existing collection names for Data Storage calls).
-2. For write/destructive tools (create_index, create_search_index, drop_index, drop_search_index):
-   create a temporary test resource, verify it exists, then clean it up.
-3. Verify that list endpoints handle API pagination correctly (the Rossum API returns paginated
-   responses with `pagination.next` URLs — confirm multi-page results are auto-collected).
-4. Record pass/fail for each tool.
-
-If a tool fails, diagnose whether the bug is in the server code (wrong field names, incorrect API path,
-bad request body shape) or a real API error. Fix server bugs in-place — update server.py
-and README.md in the same pass.
-
-After all tools pass, evaluate coverage gaps: are there Rossum API endpoints that would be high-value
-additions for an SA debugging implementations? If so, add them (with README updates).
-
-Token: <ROSSUM_API_TOKEN>
-Base URL: https://elis.rossum.ai
-```
-
-</details>
-
 ## 🔌 MCP tools (`rossum-api`)
 
 The MCP server starts automatically when `rossum-sa` is enabled. Write and destructive tools require explicit user approval.

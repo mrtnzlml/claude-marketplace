@@ -1,0 +1,60 @@
+# MCP server development prompts
+
+Copy-paste prompts for developing and testing the MCP server against a live Rossum environment.
+
+## Self-test
+
+Verify all existing MCP tools work correctly.
+
+```
+Call rossum_set_token with the provided token and base URL, then systematically test every MCP tool
+against the live API. For each tool:
+
+1. Call it with valid arguments derived from real data (use IDs from list endpoints to feed into
+   get endpoints; use existing collection names for Data Storage calls).
+2. For write/destructive tools (create_index, create_search_index, drop_index, drop_search_index):
+   create a temporary test resource, verify it exists, then clean it up.
+3. Verify that list endpoints handle API pagination correctly (the Rossum API returns paginated
+   responses with `pagination.next` URLs — confirm multi-page results are auto-collected).
+4. Record pass/fail for each tool.
+
+If a tool fails, diagnose whether the bug is in the server code (wrong field names, incorrect API path,
+bad request body shape) or a real API error. Fix server bugs in-place — update server.py
+and README.md in the same pass.
+
+After all tools pass, evaluate coverage gaps: are there Rossum API endpoints that would be high-value
+additions for an SA debugging implementations? If so, add them (with README updates).
+
+Token: <ROSSUM_API_TOKEN>
+Base URL: https://elis.rossum.ai
+```
+
+## Add a new endpoint
+
+Discover, implement, and verify a new MCP tool.
+
+```
+Call rossum_set_token with the provided token and base URL, then add a new MCP tool for:
+<DESCRIBE THE ENDPOINT, e.g. "listing automation blockers on an annotation">
+
+1. Discovery — figure out the correct Rossum API endpoint:
+   a. Check the rossum-reference and data-storage-reference skills for documentation.
+   b. Probe the live API: call related list/get tools to inspect response payloads for URLs,
+      nested resources, or fields that hint at the right path.
+   c. If still unclear, try candidate URLs directly (GET/POST) and observe the response.
+2. Implementation — add the tool to server.py:
+   a. Follow the existing patterns: use @_tool decorator, appropriate annotation
+      (_READ_ONLY / _WRITE / _DESTRUCTIVE), and the matching helper (_rossum_get, _rossum_list,
+      _rossum_post, _rossum_delete, _data_storage_call).
+   b. Include filtering parameters where the API supports them.
+   c. For list endpoints, use _rossum_list to handle pagination automatically.
+3. Verification — test the new tool against the live API:
+   a. Call it with valid arguments derived from real data.
+   b. Confirm the response shape is useful (trim excessive fields with pick_fields if needed).
+   c. For write/destructive tools, create a temporary resource, verify, then clean up.
+4. Update README.md — add the tool to the correct table section with its description and
+   appropriate icon (✏️ for write, ⚠️ for destructive).
+
+Token: <ROSSUM_API_TOKEN>
+Base URL: https://elis.rossum.ai
+```
