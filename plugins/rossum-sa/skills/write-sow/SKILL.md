@@ -33,9 +33,12 @@ You are a Rossum.ai Solution Architect writing a Statement of Work. Generate a S
 - **No assumptions.** If something is uncertain, state it as an explicit requirement on the Customer in the **Customer Cooperation** section (e.g., "Customer will provide sample documents before kickoff"). Do not embed Customer prerequisites in the Deliverables or Delivery Plan sections — deliverables describe only what Rossum will deliver, and the Delivery Plan covers only timeline and dependencies.
 - Keep language clear, professional, and unambiguous. Use concrete, measurable terms (quantities, field counts, document types).
 - Use defined terms from [defined-terms.md](defined-terms.md) where appropriate.
+- Use **title case** for deliverable names (e.g., "Queue and Schema Configuration", not "Queue and schema configuration").
 - Use bold sparingly — only for critical callouts. Prefer plain text for regular prose.
 - In deliverables, prefer paragraph descriptions. Use numbered or bullet point lists where they improve clarity. Do not use blockquotes.
-- Keep deliverables concise — specific enough to be measurable and verifiable, but not so detailed that they prescribe implementation. A few sentences per deliverable is typical.
+- Keep deliverables concise. State what Rossum will deliver and the key quantities. Do not elaborate on why, how the platform works internally, or what the benefit is. A few sentences is typical; longer is fine when the deliverable genuinely needs detail (e.g., a multi-step matching strategy), but cut filler.
+- Merge closely related deliverables into one when they share the same queue or pipeline stage (e.g., combine schema configuration and AI extraction setup into a single deliverable per queue, or bundle export format and export delivery into one). Fewer, meatier deliverables are better than many granular ones. Only separate deliverables when they have genuinely different timelines, owners, or dependencies.
+- When a deliverable relies on a default Rossum store extension (e.g., Duplicate Handling, Copy & Paste, Business Rules, Export Evaluator), scope it to that extension's capabilities rather than describing the exact behavior. For example: "The duplicate detection rules must be within capabilities of the Duplicate Handling extension." This avoids over-promising specifics that may not match what the extension supports.
 
 ## Scope Control
 
@@ -55,8 +58,8 @@ Every deliverable must have a clear implementation boundary — what Rossum will
 
 Use these as a guide when structuring the deliverables section. Not all apply to every project — include only what is relevant:
 
-- **Queue & Schema Configuration** — number of queues, document types, header fields, line items
-- **AI Extraction Setup** — field mapping, rir_field_names, Dedicated Engine training
+- **Queue & Schema Configuration** — number of queues, document types, number of header fields and line item fields (do not list individual field names — the schema is a living artifact that evolves during implementation)
+- **AI Extraction Setup** — field mapping, rir_field_names (do not include Dedicated Engine training — it is handled separately outside the SOW)
 - **Extensions & Automation** — serverless functions, webhooks, validation logic, automation blockers
 - **Master Data Hub** — dataset setup, matching configurations, import scheduling. When describing data matching, clearly outline the matching strategy as a list of matching steps. Be specific about which schema fields match against which dataset columns where possible. Example:
   Rossum will configure vendor matching with the following strategy:
@@ -76,7 +79,7 @@ The typical project duration is ~13 weeks. Use these rough estimates when assign
 | Category | Typical Duration |
 |----------|-----------------|
 | Queue & Schema Configuration | 1–2 weeks |
-| AI Extraction Setup / DE Training | 2–4 weeks (includes annotation cycles) |
+| AI Extraction Setup | 1–2 weeks |
 | Extensions & Automation | 1–3 weeks |
 | Master Data Hub | 1–2 weeks |
 | Business Rules | 1 week |
