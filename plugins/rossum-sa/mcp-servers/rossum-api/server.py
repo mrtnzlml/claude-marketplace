@@ -634,6 +634,31 @@ def handle_drop_search_index(request_id, arguments):
 
 
 @_tool(
+    "data_storage_rename_collection",
+    "Renames a Rossum Data Storage collection.",
+    {
+        "type": "object",
+        "required": ["collectionName", "target"],
+        "properties": {
+            "collectionName": {"type": "string", "description": "Current name of the collection."},
+            "target": {"type": "string", "description": "New name for the collection."},
+            "dropTarget": {
+                "type": "boolean",
+                "description": "Drop the target collection if it already exists (default: false).",
+            },
+        },
+        "additionalProperties": False,
+    },
+    annotations=_DESTRUCTIVE,
+)
+def handle_rename_collection(request_id, arguments):
+    body = {"collectionName": arguments["collectionName"], "target": arguments["target"]}
+    if "dropTarget" in arguments:
+        body["dropTarget"] = arguments["dropTarget"]
+    return _data_storage_call(request_id, "/v1/collections/rename", body)
+
+
+@_tool(
     "data_storage_find",
     "Queries documents in a Rossum Data Storage collection. Simpler than aggregate "
     "for basic lookups. Returns matching documents up to the specified limit.",
@@ -1705,7 +1730,7 @@ def main():
                 respond(request_id, {
                     "protocolVersion": "2024-11-05",
                     "capabilities": {"tools": {}},
-                    "serverInfo": {"name": "rossum-api", "version": "0.3.0"},
+                    "serverInfo": {"name": "rossum-api", "version": "0.4.0"},
                 })
             elif method == "notifications/initialized":
                 pass
