@@ -240,6 +240,47 @@ def _rossum_patch(request_id, path, body):
         tool_result(request_id, json.dumps(result, indent=2))
 
 
+def _url_to_id(value):
+    """Extract the trailing integer ID from a Rossum API URL.
+
+    'https://elis.rossum.ai/api/v1/hooks/12345' → 12345
+    Returns the original value unchanged if it is not a parseable URL.
+    """
+    if not isinstance(value, str) or "/" not in value:
+        return value
+    try:
+        return int(value.rsplit("/", 1)[-1])
+    except (ValueError, IndexError):
+        return value
+
+
+def _compact_item(item, url_fields):
+    """Convert URL reference fields to bare integer IDs in *item* (in-place).
+
+    *url_fields* is a set of field names whose values are either a single API URL
+    string or a list of API URL strings.
+    """
+    for key in url_fields:
+        val = item.get(key)
+        if val is None:
+            continue
+        if isinstance(val, list):
+            item[key] = [_url_to_id(v) for v in val]
+        else:
+            item[key] = _url_to_id(val)
+    return item
+
+
+# Fields whose values are Rossum API URLs (single or list) and should be
+# compacted to bare integer IDs in list responses to save tokens.
+_URL_REF_FIELDS = frozenset({
+    "queue", "workspace", "schema", "hooks", "queues", "run_after",
+    "token_owner", "organization", "document", "modifier", "inbox",
+    "parent", "children", "email_thread", "root_email", "documents",
+    "annotations",
+})
+
+
 def _paginate(request_id, url, *, max_results=None, pick_fields=None):
     """Auto-paginate a Rossum list endpoint. Returns list of results or None on error."""
     all_results = []
@@ -250,7 +291,9 @@ def _paginate(request_id, url, *, max_results=None, pick_fields=None):
         for item in page.get("results", []):
             if max_results and len(all_results) >= max_results:
                 break
-            all_results.append({k: item[k] for k in pick_fields if k in item} if pick_fields else item)
+            row = {k: item[k] for k in pick_fields if k in item} if pick_fields else dict(item)
+            _compact_item(row, _URL_REF_FIELDS)
+            all_results.append(row)
         if max_results and len(all_results) >= max_results:
             break
         next_url = page.get("pagination", {}).get("next")
@@ -1124,7 +1167,9 @@ def handle_search_annotations(request_id, arguments):
         for item in page.get("results", []):
             if len(all_results) >= max_results:
                 break
-            all_results.append({k: item[k] for k in _ANNOTATION_FIELDS if k in item})
+            row = {k: item[k] for k in _ANNOTATION_FIELDS if k in item}
+            _compact_item(row, _URL_REF_FIELDS)
+            all_results.append(row)
 
         next_url = page.get("pagination", {}).get("next")
         if not next_url:
