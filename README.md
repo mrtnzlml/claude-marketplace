@@ -79,8 +79,8 @@ indexes, flag any missing __dynamic_index or duplicate/redundant indexes.
 
 **🎯 Tune fuzzy matching** — Optimize MDH search scores with real data.
 ```
-Connect to Rossum and find the fuzzy match ($search) in the MDH extension. Run it against
-the MDH collections to fine-tune the __searchScore. Use at least 100 samples.
+Connect to Rossum and find the $search query in the MDH matching extension. Verify and
+calibrate the score thresholds against real data in the collection. Use at least 1000 samples.
 ```
 
 **🔀 Detect schema drift** — Find fields that diverged across queues.
