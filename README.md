@@ -2,7 +2,7 @@
 
 Turn Claude into a Rossum implementation partner — audit hooks, analyze schemas, query Data Storage, extract documents, and generate SOWs, all from your terminal.
 
-7 skills · 7 reference packs · 41 MCP tools — [Claude Code plugin marketplace](https://code.claude.com/docs/en/plugin-marketplaces) for Rossum.ai.
+7 skills · 7 reference packs · 42 MCP tools — [Claude Code plugin marketplace](https://code.claude.com/docs/en/plugin-marketplaces) for Rossum.ai.
 
 <!-- TODO: add a terminal demo GIF here (e.g. invoice extraction or hook audit) -->
 
@@ -148,6 +148,7 @@ The MCP server starts automatically when `rossum-sa` is enabled. Write and destr
 | `data_storage_create_index` | ✏️ Create a database index |
 | `data_storage_create_search_index` | ✏️ Create an Atlas Search index |
 | `data_storage_drop_index` | ⚠️ Drop a database index |
+| `data_storage_rename_collection` | ⚠️ Rename a collection |
 | `data_storage_drop_search_index` | ⚠️ Drop an Atlas Search index |
 
 ✏️ = write (requires approval) · ⚠️ = destructive (requires approval)
