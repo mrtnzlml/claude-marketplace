@@ -145,9 +145,11 @@ The MCP server starts automatically when `rossum-sa` is enabled. Write and destr
 | `data_storage_aggregate` | Run MongoDB aggregation pipelines |
 | `data_storage_list_indexes` | List collection indexes |
 | `data_storage_list_search_indexes` | List Atlas Search indexes |
+| `data_storage_insert` | ✏️ Insert one or more documents into a collection |
 | `data_storage_create_index` | ✏️ Create a database index |
 | `data_storage_create_search_index` | ✏️ Create an Atlas Search index |
 | `data_storage_drop_index` | ⚠️ Drop a database index |
+| `data_storage_drop_collection` | ⚠️ Drop a collection and all its indexes |
 | `data_storage_rename_collection` | ⚠️ Rename a collection |
 | `data_storage_drop_search_index` | ⚠️ Drop an Atlas Search index |
 

@@ -634,6 +634,26 @@ def handle_drop_search_index(request_id, arguments):
 
 
 @_tool(
+    "data_storage_drop_collection",
+    "Drops a Rossum Data Storage collection and all its indexes. "
+    "This is an async destructive operation (returns 202).",
+    {
+        "type": "object",
+        "required": ["collectionName"],
+        "properties": {
+            "collectionName": {"type": "string", "description": "The name of the collection to drop."},
+        },
+        "additionalProperties": False,
+    },
+    annotations=_DESTRUCTIVE,
+)
+def handle_drop_collection(request_id, arguments):
+    return _data_storage_call(request_id, "/v1/collections/drop", {
+        "collectionName": arguments["collectionName"],
+    })
+
+
+@_tool(
     "data_storage_rename_collection",
     "Renames a Rossum Data Storage collection.",
     {
@@ -684,7 +704,10 @@ def handle_rename_collection(request_id, arguments):
     annotations=_READ_ONLY,
 )
 def handle_find(request_id, arguments):
-    body = {"collectionName": arguments["collectionName"], "query": arguments.get("query", {})}
+    query = arguments.get("query", {})
+    if isinstance(query, str):
+        query = json.loads(query)
+    body = {"collectionName": arguments["collectionName"], "query": query}
     if "projection" in arguments:
         body["projection"] = arguments["projection"]
     if "sort" in arguments:
@@ -693,6 +716,42 @@ def handle_find(request_id, arguments):
     if "skip" in arguments:
         body["skip"] = arguments["skip"]
     return _data_storage_call(request_id, "/v1/data/find", body)
+
+
+@_tool(
+    "data_storage_insert",
+    "Inserts one or more documents into a Rossum Data Storage collection. "
+    "Implicitly creates the collection if it does not exist. "
+    "Pass a single object in 'documents' for insert_one, or multiple for insert_many.",
+    {
+        "type": "object",
+        "required": ["collectionName", "documents"],
+        "properties": {
+            "collectionName": {"type": "string", "description": "The name of the collection."},
+            "documents": {
+                "type": "array",
+                "items": {"type": "object"},
+                "description": "Array of documents to insert (1 for insert_one, >1 for insert_many).",
+            },
+            "ordered": {
+                "type": "boolean",
+                "description": "For insert_many: process inserts in order, stopping on first error (default: false).",
+            },
+        },
+        "additionalProperties": False,
+    },
+    annotations=_WRITE,
+)
+def handle_insert(request_id, arguments):
+    collection = arguments["collectionName"]
+    docs = arguments["documents"]
+    if len(docs) == 1:
+        body = {"collectionName": collection, "document": docs[0]}
+        return _data_storage_call(request_id, "/v1/data/insert_one", body)
+    body = {"collectionName": collection, "documents": docs}
+    if "ordered" in arguments:
+        body["ordered"] = arguments["ordered"]
+    return _data_storage_call(request_id, "/v1/data/insert_many", body)
 
 
 @_tool(
@@ -1730,7 +1789,7 @@ def main():
                 respond(request_id, {
                     "protocolVersion": "2024-11-05",
                     "capabilities": {"tools": {}},
-                    "serverInfo": {"name": "rossum-api", "version": "0.4.0"},
+                    "serverInfo": {"name": "rossum-api", "version": "0.5.0"},
                 })
             elif method == "notifications/initialized":
                 pass
