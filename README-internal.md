@@ -1,6 +1,17 @@
-# MCP server development prompts
+# Internal development prompts
 
-Copy-paste prompts for developing and testing the MCP server against a live Rossum environment.
+Copy-paste prompts for developing, testing, and maintaining the plugin.
+
+## Cross-pollinate knowledge
+
+Extract reusable gotchas from a project's CLAUDE.md into plugin reference skills, then trim the project file to remove redundancy.
+
+```
+Read CLAUDE.md from <path-to-project> and extract any general Rossum
+gotchas or knowledge into the appropriate plugin reference skills
+(mdh-reference, rossum-reference, prd-reference, etc.). Then simplify
+or remove lines from the project CLAUDE.md that are now redundant.
+```
 
 ## Self-test
 
