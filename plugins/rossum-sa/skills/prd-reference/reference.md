@@ -444,6 +444,7 @@ Key differences from prd v1:
 
 - prd2 does NOT automatically make git commits — use `-c` flag to opt in
 - Always run `prd2 pull` before making local edits to ensure latest remote state
+- After creating or modifying resources via MCP/API (not through prd2), always run `prd2 pull` to sync local files — never hand-write hook JSON files, let prd2 be the source of truth for local file state
 - Use `prd2 deploy run --prefer=source` to prefer local source changes over remote target on conflicts
 - Use `prd2 deploy run -p` (plan-only equivalent) or review the shown plan before confirming
 - The concurrency limit defaults to 5 parallel requests (override with `--concurrency` or `PRD2_CONCURRENCY` env var)

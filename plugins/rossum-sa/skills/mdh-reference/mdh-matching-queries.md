@@ -144,6 +144,7 @@ Schema IDs come from queue schema fields where `category` is `"datapoint"`. Only
 7. Never deploy configuration to remote without user confirmation.
 8. Default result window is 20 for fuzzy/search stages. Runtime guardrail cap is 50 records for interactive previews.
 9. Never dump full datasets in user-facing responses.
+10. Do not rely on key order in multi-key `$sort` stages without checking key lengths. Rossum's JSON serialization sorts object keys by key length (shortest first), which silently reorders `$sort` keys and changes sort priority. Always ensure the primary sort key is shorter than (or equal in length to) secondary keys. Example: `{"__priority": 1, "id.poLineId": 1}` works because `__priority` (12 chars) < `id.poLineId` (12 chars — tied, so original order is preserved). If the primary key is longer, rename it with a shorter alias (prefix with `__`).
 
 ---
 
