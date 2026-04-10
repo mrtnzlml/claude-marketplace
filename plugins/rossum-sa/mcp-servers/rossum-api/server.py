@@ -136,9 +136,11 @@ def _ensure_connection(request_id):
 # --- HTTP helpers ---
 
 
-def _http_request(request_id, url, *, method="GET", body=None):
+def _http_request(request_id, url, *, method="GET", body=None, parse_json=True):
     """Make an authenticated HTTP request. Returns parsed JSON or None (error sent).
 
+    When *parse_json* is False, returns the HTTP status code (int) instead of
+    parsed JSON — useful for DELETE (204 No Content) and other empty responses.
     Callers must call _ensure_connection first for correct URL construction.
     """
     token = _cached_token
@@ -155,6 +157,8 @@ def _http_request(request_id, url, *, method="GET", body=None):
 
     try:
         with urllib.request.urlopen(req, timeout=130, context=_ssl_context) as resp:
+            if not parse_json:
+                return resp.status
             return json.loads(resp.read().decode("utf-8"))
     except urllib.error.HTTPError as e:
         error_body = e.read().decode("utf-8") if e.fp else str(e)
@@ -210,24 +214,9 @@ def _rossum_delete(request_id, path):
     base_url, _ = _ensure_connection(request_id)
     if not base_url:
         return
-    token = _cached_token
-    req = urllib.request.Request(
-        f"{base_url}{path}",
-        headers={"Authorization": f"Bearer {token}"},
-        method="DELETE",
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=30, context=_ssl_context) as resp:
-            tool_result(request_id, f"Deleted successfully (HTTP {resp.status}).")
-    except urllib.error.HTTPError as e:
-        error_body = e.read().decode("utf-8") if e.fp else str(e)
-        if e.code == 401:
-            _invalidate_connection()
-            tool_result(request_id, f"Authentication failed (HTTP 401). Token may be expired.\n{error_body}", is_error=True)
-        else:
-            tool_result(request_id, f"HTTP {e.code}: {error_body}", is_error=True)
-    except Exception as e:
-        tool_result(request_id, f"Error: {e}", is_error=True)
+    status = _http_request(request_id, f"{base_url}{path}", method="DELETE", parse_json=False)
+    if status is not None:
+        tool_result(request_id, f"Deleted successfully (HTTP {status}).")
 
 
 def _rossum_patch(request_id, path, body):
@@ -282,12 +271,15 @@ _URL_REF_FIELDS = frozenset({
 
 
 def _paginate(request_id, url, *, max_results=None, pick_fields=None):
-    """Auto-paginate a Rossum list endpoint. Returns list of results or None on error."""
+    """Auto-paginate a Rossum list endpoint. Returns (results, api_total) or None on error."""
     all_results = []
+    api_total = None
     while url:
         page = _http_request(request_id, url)
         if page is None:
             return None
+        if api_total is None:
+            api_total = page.get("pagination", {}).get("total")
         for item in page.get("results", []):
             if max_results and len(all_results) >= max_results:
                 break
@@ -302,7 +294,7 @@ def _paginate(request_id, url, *, max_results=None, pick_fields=None):
         if _validate_base_url(next_url) != _validate_base_url(url):
             break
         url = next_url
-    return all_results
+    return (all_results, api_total)
 
 
 def _rossum_list(request_id, endpoint, params, *, pick_fields=None, max_results=None):
@@ -310,11 +302,12 @@ def _rossum_list(request_id, endpoint, params, *, pick_fields=None, max_results=
     base_url, _ = _ensure_connection(request_id)
     if not base_url:
         return
-    results = _paginate(
+    result = _paginate(
         request_id, f"{base_url}{endpoint}?{urlencode(params)}",
         max_results=max_results, pick_fields=pick_fields,
     )
-    if results is not None:
+    if result is not None:
+        results, _ = result
         tool_result(request_id, json.dumps({"total": len(results), "results": results}, indent=2))
 
 
@@ -797,6 +790,146 @@ def handle_insert(request_id, arguments):
     return _data_storage_call(request_id, "/v1/data/insert_many", body)
 
 
+_UPDATE_SCHEMA = {
+    "type": "object",
+    "required": ["collectionName", "filter", "update"],
+    "properties": {
+        "collectionName": {"type": "string", "description": "The name of the collection."},
+        "filter": {"type": "object", "description": "MongoDB query filter to select documents."},
+        "update": {
+            "description": (
+                "MongoDB update document (e.g. {\"$set\": {\"field\": \"value\"}}) "
+                "or an aggregation pipeline (array of stages)."
+            ),
+        },
+        "options": {
+            "type": "object",
+            "description": "Update options (e.g. {\"upsert\": true}).",
+        },
+    },
+    "additionalProperties": False,
+}
+
+_DELETE_SCHEMA = {
+    "type": "object",
+    "required": ["collectionName", "filter"],
+    "properties": {
+        "collectionName": {"type": "string", "description": "The name of the collection."},
+        "filter": {"type": "object", "description": "MongoDB query filter to select documents to delete."},
+        "options": {"type": "object", "description": "Delete options."},
+    },
+    "additionalProperties": False,
+}
+
+
+def _handle_ds_write(request_id, arguments, path):
+    body = {"collectionName": arguments["collectionName"], "filter": arguments["filter"]}
+    for key in ("update", "replacement", "options"):
+        if key in arguments:
+            body[key] = arguments[key]
+    return _data_storage_call(request_id, path, body)
+
+
+@_tool(
+    "data_storage_update_one",
+    "Updates the first document matching the filter in a Rossum Data Storage collection. "
+    "Use MongoDB update operators like $set, $unset, $inc, $push, etc.",
+    _UPDATE_SCHEMA,
+    annotations=_WRITE,
+)
+def handle_update_one(request_id, arguments):
+    return _handle_ds_write(request_id, arguments, "/v1/data/update_one")
+
+
+@_tool(
+    "data_storage_update_many",
+    "Updates all documents matching the filter in a Rossum Data Storage collection. "
+    "Use MongoDB update operators like $set, $unset, $inc, $push, etc.",
+    _UPDATE_SCHEMA,
+    annotations=_WRITE,
+)
+def handle_update_many(request_id, arguments):
+    return _handle_ds_write(request_id, arguments, "/v1/data/update_many")
+
+
+@_tool(
+    "data_storage_delete_one",
+    "Deletes the first document matching the filter from a Rossum Data Storage collection.",
+    _DELETE_SCHEMA,
+    annotations=_DESTRUCTIVE,
+)
+def handle_delete_one(request_id, arguments):
+    return _handle_ds_write(request_id, arguments, "/v1/data/delete_one")
+
+
+@_tool(
+    "data_storage_delete_many",
+    "Deletes all documents matching the filter from a Rossum Data Storage collection.",
+    _DELETE_SCHEMA,
+    annotations=_DESTRUCTIVE,
+)
+def handle_delete_many(request_id, arguments):
+    return _handle_ds_write(request_id, arguments, "/v1/data/delete_many")
+
+
+@_tool(
+    "data_storage_replace_one",
+    "Replaces the first document matching the filter in a Rossum Data Storage collection "
+    "with the provided replacement document.",
+    {
+        "type": "object",
+        "required": ["collectionName", "filter", "replacement"],
+        "properties": {
+            "collectionName": {"type": "string", "description": "The name of the collection."},
+            "filter": {"type": "object", "description": "MongoDB query filter to select the document."},
+            "replacement": {"type": "object", "description": "The replacement document (replaces the entire document except _id)."},
+            "options": {
+                "type": "object",
+                "description": "Replace options (e.g. {\"upsert\": true}).",
+            },
+        },
+        "additionalProperties": False,
+    },
+    annotations=_WRITE,
+)
+def handle_replace_one(request_id, arguments):
+    return _handle_ds_write(request_id, arguments, "/v1/data/replace_one")
+
+
+@_tool(
+    "data_storage_bulk_write",
+    "Performs multiple write operations atomically on a Rossum Data Storage collection. "
+    "This is an async operation (returns 202). Each operation is a single-key object: "
+    "insertOne, updateOne, updateMany, deleteOne, deleteMany, or replaceOne.",
+    {
+        "type": "object",
+        "required": ["collectionName", "operations"],
+        "properties": {
+            "collectionName": {"type": "string", "description": "The name of the collection."},
+            "operations": {
+                "type": "array",
+                "items": {"type": "object"},
+                "description": (
+                    "Array of write operations. Each is a single-key object: "
+                    "{\"insertOne\": {\"document\": {...}}}, "
+                    "{\"updateOne\": {\"filter\": {...}, \"update\": {...}}}, "
+                    "{\"deleteOne\": {\"filter\": {...}}}, "
+                    "{\"replaceOne\": {\"filter\": {...}, \"replacement\": {...}}}."
+                ),
+            },
+            "options": {"type": "object", "description": "Bulk write options."},
+        },
+        "additionalProperties": False,
+    },
+    annotations=_WRITE,
+)
+def handle_bulk_write(request_id, arguments):
+    body = {"collectionName": arguments["collectionName"], "operations": arguments["operations"]}
+    if "options" in arguments:
+        body["options"] = arguments["options"]
+    return _data_storage_call(request_id, "/v1/data/bulk_write", body)
+
+
 @_tool(
     "rossum_list_groups",
     "Lists available user roles (groups) and their IDs. "
@@ -1152,37 +1285,17 @@ def handle_search_annotations(request_id, arguments):
     if not base_url:
         return
 
-    all_results = []
-    total_count = None
-    url = f"{base_url}/api/v1/annotations?{urlencode(params)}"
-
-    while url and len(all_results) < max_results:
-        page = _http_request(request_id, url)
-        if page is None:
-            return
-
-        if total_count is None:
-            total_count = page.get("pagination", {}).get("total", 0)
-
-        for item in page.get("results", []):
-            if len(all_results) >= max_results:
-                break
-            row = {k: item[k] for k in _ANNOTATION_FIELDS if k in item}
-            _compact_item(row, _URL_REF_FIELDS)
-            all_results.append(row)
-
-        next_url = page.get("pagination", {}).get("next")
-        if not next_url:
-            break
-        if _validate_base_url(next_url) != _validate_base_url(url):
-            break
-        url = next_url
-
-    tool_result(request_id, json.dumps({
-        "total": total_count,
-        "returned": len(all_results),
-        "results": all_results,
-    }, indent=2))
+    result = _paginate(
+        request_id, f"{base_url}/api/v1/annotations?{urlencode(params)}",
+        max_results=max_results, pick_fields=_ANNOTATION_FIELDS,
+    )
+    if result is not None:
+        results, api_total = result
+        tool_result(request_id, json.dumps({
+            "total": api_total,
+            "returned": len(results),
+            "results": results,
+        }, indent=2))
 
 
 @_tool(
@@ -1514,6 +1627,46 @@ def handle_get_schema(request_id, arguments):
 
 
 @_tool(
+    "rossum_patch_schema",
+    "Updates an existing schema. Only provide the fields you want to change. "
+    "Most commonly used to update the 'content' field (the datapoint tree). "
+    "This is a write operation that affects all queues using this schema.",
+    {
+        "type": "object",
+        "required": ["schema_id"],
+        "properties": {
+            "schema_id": {
+                "type": "integer",
+                "description": "The schema ID to update.",
+            },
+            "name": {
+                "type": "string",
+                "description": "New name for the schema.",
+            },
+            "content": {
+                "type": "array",
+                "items": {"type": "object"},
+                "description": "Updated schema content (the full datapoint tree: sections, fields, multivalues).",
+            },
+            "metadata": {
+                "type": "object",
+                "description": "Custom metadata (max 4 KB).",
+            },
+        },
+        "additionalProperties": False,
+    },
+    annotations=_WRITE,
+)
+def handle_patch_schema(request_id, arguments):
+    schema_id = arguments["schema_id"]
+    body = {}
+    for key in ("name", "content", "metadata"):
+        if key in arguments:
+            body[key] = arguments[key]
+    _rossum_patch(request_id, f"/api/v1/schemas/{schema_id}", body)
+
+
+@_tool(
     "rossum_list_schemas",
     "Lists all schemas in the Rossum organization. Schemas define the data structure "
     "(fields, sections, tables) for document extraction in queues.",
@@ -1635,6 +1788,49 @@ def handle_get_document(request_id, arguments):
 )
 def handle_get_annotation(request_id, arguments):
     _rossum_get(request_id, f"/api/v1/annotations/{arguments['annotation_id']}")
+
+
+@_tool(
+    "rossum_patch_annotation",
+    "Updates an annotation. Most commonly used to change status (e.g. confirm, reject, "
+    "move to review, export). Only provide the fields you want to change. "
+    "This is a write operation.",
+    {
+        "type": "object",
+        "required": ["annotation_id"],
+        "properties": {
+            "annotation_id": {
+                "type": "integer",
+                "description": "The annotation ID to update.",
+            },
+            "status": {
+                "type": "string",
+                "description": (
+                    "New status. Common transitions: "
+                    "'to_review' (send back for review), "
+                    "'confirmed' (confirm the annotation), "
+                    "'rejected' (reject the annotation), "
+                    "'exporting' (trigger export), "
+                    "'postponed' (postpone processing), "
+                    "'deleted' (soft-delete)."
+                ),
+            },
+            "metadata": {
+                "type": "object",
+                "description": "Custom metadata (max 4 KB). Merged with existing metadata.",
+            },
+        },
+        "additionalProperties": False,
+    },
+    annotations=_WRITE,
+)
+def handle_patch_annotation(request_id, arguments):
+    annotation_id = arguments["annotation_id"]
+    body = {}
+    for key in ("status", "metadata"):
+        if key in arguments:
+            body[key] = arguments[key]
+    _rossum_patch(request_id, f"/api/v1/annotations/{annotation_id}", body)
 
 
 @_tool(

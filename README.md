@@ -2,7 +2,7 @@
 
 Turn Claude into a Rossum implementation partner — audit hooks, analyze schemas, query Data Storage, extract documents, and generate SOWs, all from your terminal.
 
-7 skills · 8 reference packs · 42 MCP tools — [Claude Code plugin marketplace](https://code.claude.com/docs/en/plugin-marketplaces) for Rossum.ai.
+6 skills · 8 reference packs · 53 MCP tools — [Claude Code plugin marketplace](https://code.claude.com/docs/en/plugin-marketplaces) for Rossum.ai.
 
 <!-- TODO: add a terminal demo GIF here (e.g. invoice extraction or hook audit) -->
 
@@ -37,7 +37,6 @@ component (🟢 healthy, 🟡 warning, 🔴 broken).
 | `/rossum-sa:document [path]` | Produce a queue-focused reference document |
 | `/rossum-sa:implement` | Plan and execute an integration project end-to-end |
 | `/rossum-sa:upgrade [path]` | Upgrade deprecated extensions to modern formula fields |
-| `/rossum-sa:test [path]` | E2E test an implementation against the live environment |
 
 ### `nerossum`
 
@@ -110,6 +109,7 @@ The MCP server starts automatically when `rossum-sa` is enabled. Write and destr
 | `rossum_list_queues` | List queues (filter by workspace, status) |
 | `rossum_get_queue` | Get full queue details |
 | `rossum_get_schema` | Get queue schema (datapoints, sections, tables) |
+| `rossum_patch_schema` | ✏️ Update a schema (name, content, metadata) |
 | `rossum_list_schemas` | List all schemas |
 | `rossum_list_hooks` | List hooks/extensions (filter by queue, active) |
 | `rossum_get_hook` | Get full hook details including code and config |
@@ -121,6 +121,7 @@ The MCP server starts automatically when `rossum-sa` is enabled. Write and destr
 | `rossum_list_annotations` | List annotations in a queue (filter by status) |
 | `rossum_search_annotations` | Search annotations across queues (filter by status, date range, workspace) |
 | `rossum_get_annotation` | Get annotation metadata, messages, and state |
+| `rossum_patch_annotation` | ✏️ Update annotation status or metadata (confirm, reject, export) |
 | `rossum_get_annotation_content` | Get extracted data from an annotation |
 | `rossum_get_document` | Get document metadata (filename, MIME type) |
 | `rossum_get_inbox` | Get inbox details (email address, config) |
@@ -147,6 +148,12 @@ The MCP server starts automatically when `rossum-sa` is enabled. Write and destr
 | `data_storage_list_indexes` | List collection indexes |
 | `data_storage_list_search_indexes` | List Atlas Search indexes |
 | `data_storage_insert` | ✏️ Insert one or more documents into a collection |
+| `data_storage_update_one` | ✏️ Update first document matching a filter |
+| `data_storage_update_many` | ✏️ Update all documents matching a filter |
+| `data_storage_replace_one` | ✏️ Replace first document matching a filter |
+| `data_storage_delete_one` | ⚠️ Delete first document matching a filter |
+| `data_storage_delete_many` | ⚠️ Delete all documents matching a filter |
+| `data_storage_bulk_write` | ✏️ Perform multiple write operations atomically |
 | `data_storage_create_index` | ✏️ Create a database index |
 | `data_storage_create_search_index` | ✏️ Create an Atlas Search index |
 | `data_storage_drop_index` | ⚠️ Drop a database index |

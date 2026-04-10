@@ -16,7 +16,7 @@ A Claude Code plugin marketplace for Rossum.ai workflows (https://code.claude.co
 - `.claude-plugin/marketplace.json` lists available plugins
 - Each plugin lives under `plugins/<name>/` with its own `.claude-plugin/plugin.json`
 - Skills are Markdown files at `plugins/<name>/skills/<skill-name>/SKILL.md`
-- The `rossum-sa` plugin has 6 invocable skills (analyze, document, implement, upgrade, write-sow, test) and 8 autoloaded reference packs (*-reference skills)
+- The `rossum-sa` plugin has 5 invocable skills (analyze, document, implement, upgrade, write-sow) and 8 autoloaded reference packs (*-reference skills)
 
 **MCP server** (`plugins/rossum-sa/mcp-servers/rossum-api/server.py`):
 - Single-file Python, ~1500 lines, zero external dependencies (stdlib `urllib` + optional `certifi` for SSL)
