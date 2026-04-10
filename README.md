@@ -26,6 +26,12 @@ component (🟢 healthy, 🟡 warning, 🔴 broken).
 
 > **Note:** Auto-updates are off by default for third-party marketplaces. Enable them in `/plugin` → **Marketplaces** tab.
 
+**Optional:** For a better experience when developing and implementing projects, install the [superpowers](https://github.com/obra/superpowers) plugin — it adds structured planning, TDD workflows, and code review skills that pair well with `rossum-sa`:
+
+```bash
+/plugin install superpowers@claude-plugins-official
+```
+
 ## ⚡ Skills
 
 ### `rossum-sa`
