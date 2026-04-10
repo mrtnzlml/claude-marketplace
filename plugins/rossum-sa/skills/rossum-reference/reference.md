@@ -105,6 +105,8 @@ Supported for upload/export endpoints: `Authorization: Basic {base64(username:pa
 
 **Base URL**: `https://<domain>.rossum.app/api/v1`
 
+**Clusters and shared extension URLs**: Rossum runs on multiple regional clusters (e.g. `eu2`, `us2`). Shared (built-in) extensions use cluster-specific URL prefixes: `https://shared-{cluster}.{extension-name}.rossum-ext.app/`. For example, on US2: `https://shared-us2.custom-format-templating.rossum-ext.app/`. The SFTP/file-storage export URL follows a different pattern: `https://shared-{cluster}.rossum.app/svc/file-storage-export/api/v1/export`. Always match the cluster prefix to the organization's deployment cluster — using the wrong prefix will fail silently or route to the wrong environment.
+
 **Pagination**: All list endpoints use `page_size` (default: 20, max: 100) and `page` (default: 1)
 
 **Ordering**: `ordering` parameter, prefix with `-` for descending
@@ -697,6 +699,7 @@ Hooks extend Rossum with custom logic. Three types: **webhooks**, **serverless f
 - `sideload` (array): Additional data to include in payloads
 - `token_owner` (string): User identity for API access
 - `run_after` (array): Hook URLs that must run before this one
+- `description` (string): Human-readable description of what the hook does — always fill this in and keep it up to date when creating or modifying hooks
 - `metadata` (object): Custom JSON (up to 4 KB)
 - `settings` (object): Behavior settings (retry, timeout, queue filters)
 - `secrets` (object): Sensitive credential storage
@@ -1564,5 +1567,7 @@ The document sorting extension routes documents to different queues based on fie
 
 - `value`: the formula field value that triggers this rule
 - `target_queue`: queue ID to move the document to
-- `target_status`: status in the target queue after move
+- `target_status`: status in the target queue after move (`"importing"` to re-extract, `"to_review"` to keep existing data)
 - `trigger_status`: the document must be in this status for the rule to fire
+
+**Reimport gotcha:** When `target_status` is `"importing"`, the document is re-extracted by the AI engine in the destination queue, which **resets all annotation data points** (field values, messages, etc.). To preserve field values across a reimport move, implement a Store/Restore data points hook pair: (1) a hook on the source queue saves critical field values to `annotation.metadata` before the move, and (2) a hook on the destination queue reads them back from metadata after reimport completes. Without this, any values set by formulas, matching, or manual corrections in the source queue will be lost.

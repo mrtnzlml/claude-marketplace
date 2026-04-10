@@ -230,6 +230,81 @@ def _rossum_delete(request_id, path):
         tool_result(request_id, f"Error: {e}", is_error=True)
 
 
+def _rossum_patch(request_id, path, body):
+    """PATCH a Rossum API resource and return the result as JSON."""
+    base_url, _ = _ensure_connection(request_id)
+    if not base_url:
+        return
+    result = _http_request(request_id, f"{base_url}{path}", method="PATCH", body=body)
+    if result is not None:
+        tool_result(request_id, json.dumps(result, indent=2))
+
+
+def _url_to_id(value):
+    """Extract the trailing integer ID from a Rossum API URL.
+
+    'https://elis.rossum.ai/api/v1/hooks/12345' → 12345
+    Returns the original value unchanged if it is not a parseable URL.
+    """
+    if not isinstance(value, str) or "/" not in value:
+        return value
+    try:
+        return int(value.rsplit("/", 1)[-1])
+    except (ValueError, IndexError):
+        return value
+
+
+def _compact_item(item, url_fields):
+    """Convert URL reference fields to bare integer IDs in *item* (in-place).
+
+    *url_fields* is a set of field names whose values are either a single API URL
+    string or a list of API URL strings.
+    """
+    for key in url_fields:
+        val = item.get(key)
+        if val is None:
+            continue
+        if isinstance(val, list):
+            item[key] = [_url_to_id(v) for v in val]
+        else:
+            item[key] = _url_to_id(val)
+    return item
+
+
+# Fields whose values are Rossum API URLs (single or list) and should be
+# compacted to bare integer IDs in list responses to save tokens.
+_URL_REF_FIELDS = frozenset({
+    "queue", "workspace", "schema", "hooks", "queues", "run_after",
+    "token_owner", "organization", "document", "modifier", "inbox",
+    "parent", "children", "email_thread", "root_email", "documents",
+    "annotations",
+})
+
+
+def _paginate(request_id, url, *, max_results=None, pick_fields=None):
+    """Auto-paginate a Rossum list endpoint. Returns list of results or None on error."""
+    all_results = []
+    while url:
+        page = _http_request(request_id, url)
+        if page is None:
+            return None
+        for item in page.get("results", []):
+            if max_results and len(all_results) >= max_results:
+                break
+            row = {k: item[k] for k in pick_fields if k in item} if pick_fields else dict(item)
+            _compact_item(row, _URL_REF_FIELDS)
+            all_results.append(row)
+        if max_results and len(all_results) >= max_results:
+            break
+        next_url = page.get("pagination", {}).get("next")
+        if not next_url:
+            break
+        if _validate_base_url(next_url) != _validate_base_url(url):
+            break
+        url = next_url
+    return all_results
+
+
 def _rossum_list(request_id, endpoint, params, *, pick_fields=None, max_results=None):
     """Paginate a Rossum API list endpoint and return collected results."""
     base_url, _ = _ensure_connection(request_id)
@@ -265,6 +340,32 @@ def _tool(name, description, schema, annotations=None):
         HANDLERS[name] = handler
         return handler
     return decorator
+
+
+# --- Field filters for list endpoints ---
+
+
+_USER_FIELDS = ("id", "email", "first_name", "last_name", "is_active")
+_HOOK_LOG_FIELDS = (
+    "hook_id", "annotation_id", "queue_id", "event", "action",
+    "status", "log_level", "message", "timestamp", "start", "end",
+)
+_ANNOTATION_FIELDS = ("id", "queue", "status", "document", "modifier", "modified_at", "confirmed_at", "exported_at")
+_QUEUE_FIELDS = ("id", "name", "workspace", "schema", "hooks", "status", "dedicated_engine")
+_HOOK_FIELDS = ("id", "name", "type", "events", "queues", "active", "run_after", "token_owner")
+_SCHEMA_FIELDS = ("id", "name", "queues")
+_WORKSPACE_FIELDS = ("id", "name", "organization", "queues", "autopilot")
+_CONNECTOR_FIELDS = ("id", "name", "queues", "service_url", "authorization_type", "asynchronous")
+_EMAIL_FIELDS = (
+    "id", "queue", "inbox", "subject", "from", "to", "cc", "bcc",
+    "type", "created_at", "documents", "annotations", "parent", "children",
+    "email_thread", "annotation_counts", "labels", "metadata",
+)
+_EMAIL_THREAD_FIELDS = (
+    "id", "queue", "root_email", "subject", "from", "has_replies",
+    "has_new_replies", "created_at", "last_email_created_at",
+    "annotation_counts", "labels",
+)
 
 
 # --- Tools ---
@@ -576,6 +677,51 @@ def handle_drop_search_index(request_id, arguments):
 
 
 @_tool(
+    "data_storage_drop_collection",
+    "Drops a Rossum Data Storage collection and all its indexes. "
+    "This is an async destructive operation (returns 202).",
+    {
+        "type": "object",
+        "required": ["collectionName"],
+        "properties": {
+            "collectionName": {"type": "string", "description": "The name of the collection to drop."},
+        },
+        "additionalProperties": False,
+    },
+    annotations=_DESTRUCTIVE,
+)
+def handle_drop_collection(request_id, arguments):
+    return _data_storage_call(request_id, "/v1/collections/drop", {
+        "collectionName": arguments["collectionName"],
+    })
+
+
+@_tool(
+    "data_storage_rename_collection",
+    "Renames a Rossum Data Storage collection.",
+    {
+        "type": "object",
+        "required": ["collectionName", "target"],
+        "properties": {
+            "collectionName": {"type": "string", "description": "Current name of the collection."},
+            "target": {"type": "string", "description": "New name for the collection."},
+            "dropTarget": {
+                "type": "boolean",
+                "description": "Drop the target collection if it already exists (default: false).",
+            },
+        },
+        "additionalProperties": False,
+    },
+    annotations=_DESTRUCTIVE,
+)
+def handle_rename_collection(request_id, arguments):
+    body = {"collectionName": arguments["collectionName"], "target": arguments["target"]}
+    if "dropTarget" in arguments:
+        body["dropTarget"] = arguments["dropTarget"]
+    return _data_storage_call(request_id, "/v1/collections/rename", body)
+
+
+@_tool(
     "data_storage_find",
     "Queries documents in a Rossum Data Storage collection. Simpler than aggregate "
     "for basic lookups. Returns matching documents up to the specified limit.",
@@ -601,7 +747,10 @@ def handle_drop_search_index(request_id, arguments):
     annotations=_READ_ONLY,
 )
 def handle_find(request_id, arguments):
-    body = {"collectionName": arguments["collectionName"], "query": arguments.get("query", {})}
+    query = arguments.get("query", {})
+    if isinstance(query, str):
+        query = json.loads(query)
+    body = {"collectionName": arguments["collectionName"], "query": query}
     if "projection" in arguments:
         body["projection"] = arguments["projection"]
     if "sort" in arguments:
@@ -612,29 +761,55 @@ def handle_find(request_id, arguments):
     return _data_storage_call(request_id, "/v1/data/find", body)
 
 
-def _paginate(request_id, url, *, max_results=None, pick_fields=None):
-    """Auto-paginate a Rossum list endpoint. Returns list of results or None on error."""
-    all_results = []
-    while url:
-        page = _http_request(request_id, url)
-        if page is None:
-            return None
-        for item in page.get("results", []):
-            if max_results and len(all_results) >= max_results:
-                break
-            all_results.append({k: item[k] for k in pick_fields if k in item} if pick_fields else item)
-        if max_results and len(all_results) >= max_results:
-            break
-        next_url = page.get("pagination", {}).get("next")
-        if not next_url:
-            break
-        if _validate_base_url(next_url) != _validate_base_url(url):
-            break
-        url = next_url
-    return all_results
+@_tool(
+    "data_storage_insert",
+    "Inserts one or more documents into a Rossum Data Storage collection. "
+    "Implicitly creates the collection if it does not exist. "
+    "Pass a single object in 'documents' for insert_one, or multiple for insert_many.",
+    {
+        "type": "object",
+        "required": ["collectionName", "documents"],
+        "properties": {
+            "collectionName": {"type": "string", "description": "The name of the collection."},
+            "documents": {
+                "type": "array",
+                "items": {"type": "object"},
+                "description": "Array of documents to insert (1 for insert_one, >1 for insert_many).",
+            },
+            "ordered": {
+                "type": "boolean",
+                "description": "For insert_many: process inserts in order, stopping on first error (default: false).",
+            },
+        },
+        "additionalProperties": False,
+    },
+    annotations=_WRITE,
+)
+def handle_insert(request_id, arguments):
+    collection = arguments["collectionName"]
+    docs = arguments["documents"]
+    if len(docs) == 1:
+        body = {"collectionName": collection, "document": docs[0]}
+        return _data_storage_call(request_id, "/v1/data/insert_one", body)
+    body = {"collectionName": collection, "documents": docs}
+    if "ordered" in arguments:
+        body["ordered"] = arguments["ordered"]
+    return _data_storage_call(request_id, "/v1/data/insert_many", body)
 
 
-_USER_FIELDS = ("id", "email", "first_name", "last_name", "is_active")
+@_tool(
+    "rossum_list_groups",
+    "Lists available user roles (groups) and their IDs. "
+    "Use these IDs for the group_ids parameter when creating users.",
+    {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": False,
+    },
+    annotations=_READ_ONLY,
+)
+def handle_list_groups(request_id, arguments):
+    _rossum_list(request_id, "/api/v1/groups", [("page_size", 100)])
 
 
 @_tool(
@@ -654,6 +829,98 @@ def handle_list_users(request_id, arguments):
     if "is_active" in arguments:
         params.append(("is_active", "true" if arguments["is_active"] else "false"))
     _rossum_list(request_id, "/api/v1/users", params, pick_fields=_USER_FIELDS)
+
+
+@_tool(
+    "rossum_create_user",
+    "Creates a new user in the Rossum organization. "
+    "Use rossum_whoami to get the organization ID, rossum_list_groups to decide which group_ids to assign, "
+    "and rossum_list_users to verify the user was created.",
+    {
+        "type": "object",
+        "required": ["username", "first_name", "last_name", "organization_id", "group_ids"],
+        "properties": {
+            "username": {
+                "type": "string",
+                "description": "Login username (can be any string, does not have to be an email).",
+            },
+            "first_name": {
+                "type": "string",
+                "description": "User's first name.",
+            },
+            "last_name": {
+                "type": "string",
+                "description": "User's last name.",
+            },
+            "organization_id": {
+                "type": "integer",
+                "description": "Organization ID the user belongs to (from rossum_whoami).",
+            },
+            "password": {
+                "type": "string",
+                "description": "Initial password. If omitted, user must set password via activation email.",
+            },
+            "email": {
+                "type": "string",
+                "description": "User's email address.",
+            },
+            "group_ids": {
+                "type": "array",
+                "items": {"type": "integer"},
+                "description": "Group IDs for role assignment (e.g. organization admin, manager, annotator).",
+            },
+            "queue_ids": {
+                "type": "array",
+                "items": {"type": "integer"},
+                "description": "Queue IDs the user can access.",
+            },
+            "oidc_id": {
+                "type": "string",
+                "description": "OpenID Connect identifier for SSO users.",
+            },
+            "auth_type": {
+                "type": "string",
+                "description": "Authentication type (e.g. 'sso'). Omit for password-based auth.",
+            },
+            "is_active": {
+                "type": "boolean",
+                "description": "Whether the account is active (default: true).",
+            },
+            "metadata": {
+                "type": "object",
+                "description": "Custom JSON metadata (max 4 KB).",
+            },
+        },
+        "additionalProperties": False,
+    },
+    annotations=_WRITE,
+)
+def handle_create_user(request_id, arguments):
+    base_url, _ = _ensure_connection(request_id)
+    if not base_url:
+        return
+    body = {
+        "username": arguments["username"],
+        "first_name": arguments["first_name"],
+        "last_name": arguments["last_name"],
+        "organization": f"{base_url}/api/v1/organizations/{arguments['organization_id']}",
+    }
+    if "password" in arguments:
+        body["password"] = arguments["password"]
+    if "email" in arguments:
+        body["email"] = arguments["email"]
+    body["groups"] = [f"{base_url}/api/v1/groups/{gid}" for gid in arguments["group_ids"]]
+    if "queue_ids" in arguments:
+        body["queues"] = [f"{base_url}/api/v1/queues/{qid}" for qid in arguments["queue_ids"]]
+    if "oidc_id" in arguments:
+        body["oidc_id"] = arguments["oidc_id"]
+    if "auth_type" in arguments:
+        body["auth_type"] = arguments["auth_type"]
+    if "is_active" in arguments:
+        body["is_active"] = arguments["is_active"]
+    if "metadata" in arguments:
+        body["metadata"] = arguments["metadata"]
+    _rossum_post(request_id, "/api/v1/users", body)
 
 
 @_tool(
@@ -718,7 +985,62 @@ def handle_get_hook_secret_keys(request_id, arguments):
     _rossum_get(request_id, f"/api/v1/hooks/{arguments['hook_id']}/secrets_keys")
 
 
-_ANNOTATION_FIELDS = ("id", "queue", "status", "document", "modifier", "modified_at", "confirmed_at", "exported_at")
+@_tool(
+    "rossum_list_hook_logs",
+    "Lists recent hook execution logs. Essential for debugging hook failures — shows "
+    "which hooks ran, their status (succeeded/failed/skipped), timing, and error messages. "
+    "Filter by hook ID, annotation, queue, status, or time range.",
+    {
+        "type": "object",
+        "properties": {
+            "hook": {
+                "type": "integer",
+                "description": "Filter by hook ID.",
+            },
+            "annotation": {
+                "type": "integer",
+                "description": "Filter by annotation ID.",
+            },
+            "queue": {
+                "type": "integer",
+                "description": "Filter by queue ID.",
+            },
+            "status": {
+                "type": "string",
+                "description": "Filter by execution status.",
+            },
+            "log_level": {
+                "type": "string",
+                "description": "Filter by log level.",
+            },
+            "timestamp_after": {
+                "type": "string",
+                "description": "Filter: logs after this ISO 8601 timestamp.",
+            },
+            "timestamp_before": {
+                "type": "string",
+                "description": "Filter: logs before this ISO 8601 timestamp.",
+            },
+            "max_results": {
+                "type": "integer",
+                "description": "Maximum entries to return (default: 20, max: 200).",
+            },
+        },
+        "additionalProperties": False,
+    },
+    annotations=_READ_ONLY,
+)
+def handle_list_hook_logs(request_id, arguments):
+    max_results = min(arguments.get("max_results", 20), 200)
+    params = [("page_size", min(max_results, 100))]
+    for key in ("hook", "annotation", "queue", "status", "log_level",
+                "timestamp_after", "timestamp_before"):
+        if key in arguments:
+            params.append((key, arguments[key]))
+    _rossum_list(
+        request_id, "/api/v1/hooks/logs", params,
+        max_results=max_results, pick_fields=_HOOK_LOG_FIELDS,
+    )
 
 
 @_tool(
@@ -845,7 +1167,9 @@ def handle_search_annotations(request_id, arguments):
         for item in page.get("results", []):
             if len(all_results) >= max_results:
                 break
-            all_results.append({k: item[k] for k in _ANNOTATION_FIELDS if k in item})
+            row = {k: item[k] for k in _ANNOTATION_FIELDS if k in item}
+            _compact_item(row, _URL_REF_FIELDS)
+            all_results.append(row)
 
         next_url = page.get("pagination", {}).get("next")
         if not next_url:
@@ -880,9 +1204,6 @@ def handle_search_annotations(request_id, arguments):
 )
 def handle_get_annotation_content(request_id, arguments):
     _rossum_get(request_id, f"/api/v1/annotations/{arguments['annotation_id']}/content")
-
-
-_QUEUE_FIELDS = ("id", "name", "workspace", "schema", "hooks", "status", "dedicated_engine")
 
 
 @_tool(
@@ -933,9 +1254,6 @@ def handle_list_queues(request_id, arguments):
 )
 def handle_get_queue(request_id, arguments):
     _rossum_get(request_id, f"/api/v1/queues/{arguments['queue_id']}")
-
-
-_HOOK_FIELDS = ("id", "name", "type", "events", "queues", "active", "run_after", "token_owner")
 
 
 @_tool(
@@ -1096,6 +1414,85 @@ def handle_delete_hook(request_id, arguments):
 
 
 @_tool(
+    "rossum_patch_hook",
+    "Updates an existing hook (extension). Only provide the fields you want to change — "
+    "unspecified fields are left untouched. Use this to update hook code, toggle active state, "
+    "change events, or reassign queues without recreating the hook. This is a write operation.",
+    {
+        "type": "object",
+        "required": ["hook_id"],
+        "properties": {
+            "hook_id": {
+                "type": "integer",
+                "description": "The hook ID to update.",
+            },
+            "name": {
+                "type": "string",
+                "description": "New display name.",
+            },
+            "config": {
+                "type": "object",
+                "description": (
+                    "Updated config. For function hooks: {\"code\": \"...\"}. "
+                    "Only include keys you want to change."
+                ),
+            },
+            "events": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "Updated event triggers (replaces the full list).",
+            },
+            "active": {
+                "type": "boolean",
+                "description": "Enable or disable the hook.",
+            },
+            "queue_ids": {
+                "type": "array",
+                "items": {"type": "integer"},
+                "description": "Replace attached queues (full list, not additive).",
+            },
+            "run_after": {
+                "type": "array",
+                "items": {"type": "integer"},
+                "description": "Replace execution ordering dependencies.",
+            },
+            "sideload": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "Updated sideload configuration.",
+            },
+            "token_owner": {
+                "type": "integer",
+                "description": "User ID whose permissions the hook uses.",
+            },
+            "settings": {
+                "type": "object",
+                "description": "Updated hook settings.",
+            },
+        },
+        "additionalProperties": False,
+    },
+    annotations=_WRITE,
+)
+def handle_patch_hook(request_id, arguments):
+    base_url, _ = _ensure_connection(request_id)
+    if not base_url:
+        return
+    hook_id = arguments["hook_id"]
+    body = {}
+    for key in ("name", "config", "events", "active", "sideload", "settings"):
+        if key in arguments:
+            body[key] = arguments[key]
+    if "queue_ids" in arguments:
+        body["queues"] = [f"{base_url}/api/v1/queues/{qid}" for qid in arguments["queue_ids"]]
+    if "run_after" in arguments:
+        body["run_after"] = [f"{base_url}/api/v1/hooks/{hid}" for hid in arguments["run_after"]]
+    if "token_owner" in arguments:
+        body["token_owner"] = f"{base_url}/api/v1/users/{arguments['token_owner']}"
+    _rossum_patch(request_id, f"/api/v1/hooks/{hook_id}", body)
+
+
+@_tool(
     "rossum_get_schema",
     "Retrieves the full schema definition of a queue. The schema defines all datapoints "
     "(fields), sections, multivalue (table) structures, and their validation rules.",
@@ -1116,9 +1513,6 @@ def handle_get_schema(request_id, arguments):
     _rossum_get(request_id, f"/api/v1/schemas/{arguments['schema_id']}")
 
 
-_SCHEMA_FIELDS = ("id", "name", "queues")
-
-
 @_tool(
     "rossum_list_schemas",
     "Lists all schemas in the Rossum organization. Schemas define the data structure "
@@ -1132,9 +1526,6 @@ _SCHEMA_FIELDS = ("id", "name", "queues")
 )
 def handle_list_schemas(request_id, arguments):
     _rossum_list(request_id, "/api/v1/schemas", [("page_size", 100)], pick_fields=_SCHEMA_FIELDS)
-
-
-_WORKSPACE_FIELDS = ("id", "name", "organization", "queues", "autopilot")
 
 
 @_tool(
@@ -1224,13 +1615,6 @@ def handle_get_document(request_id, arguments):
     _rossum_get(request_id, f"/api/v1/documents/{arguments['document_id']}")
 
 
-_ANNOTATION_DETAIL_FIELDS = (
-    "id", "queue", "status", "document", "modifier", "modified_at", "confirmed_at",
-    "exported_at", "automated", "messages", "metadata", "created_at", "started_at",
-    "relations", "email",
-)
-
-
 @_tool(
     "rossum_get_annotation",
     "Retrieves full metadata of a single annotation including status, messages (validation "
@@ -1272,9 +1656,6 @@ def handle_get_annotation(request_id, arguments):
 )
 def handle_get_inbox(request_id, arguments):
     _rossum_get(request_id, f"/api/v1/inboxes/{arguments['inbox_id']}")
-
-
-_CONNECTOR_FIELDS = ("id", "name", "queues", "service_url", "authorization_type", "asynchronous")
 
 
 @_tool(
@@ -1320,13 +1701,6 @@ def handle_list_connectors(request_id, arguments):
 )
 def handle_get_connector(request_id, arguments):
     _rossum_get(request_id, f"/api/v1/connectors/{arguments['connector_id']}")
-
-
-_EMAIL_FIELDS = (
-    "id", "queue", "inbox", "subject", "from", "to", "cc", "bcc",
-    "type", "created_at", "documents", "annotations", "parent", "children",
-    "email_thread", "annotation_counts", "labels", "metadata",
-)
 
 
 @_tool(
@@ -1386,13 +1760,6 @@ def handle_list_emails(request_id, arguments):
 )
 def handle_get_email(request_id, arguments):
     _rossum_get(request_id, f"/api/v1/emails/{arguments['email_id']}")
-
-
-_EMAIL_THREAD_FIELDS = (
-    "id", "queue", "root_email", "subject", "from", "has_replies",
-    "has_new_replies", "created_at", "last_email_created_at",
-    "annotation_counts", "labels",
-)
 
 
 @_tool(
@@ -1467,7 +1834,7 @@ def main():
                 respond(request_id, {
                     "protocolVersion": "2024-11-05",
                     "capabilities": {"tools": {}},
-                    "serverInfo": {"name": "rossum-api", "version": "0.2.0"},
+                    "serverInfo": {"name": "rossum-api", "version": "0.6.0"},
                 })
             elif method == "notifications/initialized":
                 pass

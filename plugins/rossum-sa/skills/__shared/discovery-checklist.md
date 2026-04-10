@@ -2,6 +2,8 @@
 
 Use this checklist to systematically discover all components of a Rossum implementation. Implementations typically follow a multi-environment directory structure.
 
+**Prefer built-in tools over scripts for document introspection.** When exploring project files, configs, or data structures, use Grep, Glob, and Read instead of writing and executing Python (or other) scripts. Scripts add unnecessary files and runtime dependencies; the built-in tools are faster and leave no artifacts.
+
 ## Discovery Process
 
 Use the provided path (or current directory if none given). Discover and internalize all components before producing any output.
