@@ -2,7 +2,7 @@
 
 Turn Claude into a Rossum implementation partner — audit hooks, analyze schemas, query Data Storage, extract documents, and generate SOWs, all from your terminal.
 
-8 skills · 7 reference packs · 37 MCP tools — [Claude Code plugin marketplace](https://code.claude.com/docs/en/plugin-marketplaces) for Rossum.ai.
+7 skills · 8 reference packs · 42 MCP tools — [Claude Code plugin marketplace](https://code.claude.com/docs/en/plugin-marketplaces) for Rossum.ai.
 
 <!-- TODO: add a terminal demo GIF here (e.g. invoice extraction or hook audit) -->
 
@@ -37,7 +37,6 @@ component (🟢 healthy, 🟡 warning, 🔴 broken).
 | `/rossum-sa:document [path]` | Produce a queue-focused reference document |
 | `/rossum-sa:implement` | Plan and execute an integration project end-to-end |
 | `/rossum-sa:upgrade [path]` | Upgrade deprecated extensions to modern formula fields |
-| `/rossum-sa:coupa-baseline` | CIB reference — Coupa AP invoice integration baseline |
 | `/rossum-sa:test [path]` | E2E test an implementation against the live environment |
 
 ### `nerossum`
@@ -56,6 +55,7 @@ When `rossum-sa` is enabled, Claude automatically gets domain knowledge for:
 - **Data Storage API** — CRUD, indexing, search
 - **TxScript & Serverless Functions** — formula fields, extension development
 - **SAP Integration** — connector setup, mapping
+- **Coupa Integration Baseline (CIB)** — schema, MDH matching, export pipeline, business rules
 - **prd2 CLI** — deployment and management commands
 
 ## 💡 What can you do with this?
@@ -80,8 +80,8 @@ indexes, flag any missing __dynamic_index or duplicate/redundant indexes.
 
 **🎯 Tune fuzzy matching** — Optimize MDH search scores with real data.
 ```
-Connect to Rossum and find the fuzzy match ($search) in the MDH extension. Run it against
-the MDH collections to fine-tune the __searchScore. Use at least 100 samples.
+Connect to Rossum and find the $search query in the MDH matching extension. Verify and
+calibrate the score thresholds against real data in the collection. Use at least 1000 samples.
 ```
 
 **🔀 Detect schema drift** — Find fields that diverged across queues.
@@ -89,34 +89,6 @@ the MDH collections to fine-tune the __searchScore. Use at least 100 samples.
 Connect to Rossum and compare schemas across all active queues. List fields that exist in
 one schema but not another.
 ```
-
-<details>
-<summary><strong>🧪 MCP server self-test</strong> (for development/CI)</summary>
-
-```
-Call rossum_set_token with the provided token and base URL, then systematically test every MCP tool
-against the live API. For each tool:
-
-1. Call it with valid arguments derived from real data (use IDs from list endpoints to feed into
-   get endpoints; use existing collection names for Data Storage calls).
-2. For write/destructive tools (create_index, create_search_index, drop_index, drop_search_index):
-   create a temporary test resource, verify it exists, then clean it up.
-3. Verify that list endpoints handle API pagination correctly (the Rossum API returns paginated
-   responses with `pagination.next` URLs — confirm multi-page results are auto-collected).
-4. Record pass/fail for each tool.
-
-If a tool fails, diagnose whether the bug is in the server code (wrong field names, incorrect API path,
-bad request body shape) or a real API error. Fix server bugs in-place — update server.py
-and README.md in the same pass.
-
-After all tools pass, evaluate coverage gaps: are there Rossum API endpoints that would be high-value
-additions for an SA debugging implementations? If so, add them (with README updates).
-
-Token: <ROSSUM_API_TOKEN>
-Base URL: https://elis.rossum.ai
-```
-
-</details>
 
 ## 🔌 MCP tools (`rossum-api`)
 
@@ -143,7 +115,9 @@ The MCP server starts automatically when `rossum-sa` is enabled. Write and destr
 | `rossum_get_hook` | Get full hook details including code and config |
 | `rossum_create_hook` | ✏️ Create a new hook (serverless function or webhook) |
 | `rossum_delete_hook` | ⚠️ Delete a hook |
+| `rossum_patch_hook` | ✏️ Update an existing hook (code, events, active, queues) |
 | `rossum_get_hook_secret_keys` | List secret key names on a hook |
+| `rossum_list_hook_logs` | List hook execution logs (filter by hook, annotation, queue, status) |
 | `rossum_list_annotations` | List annotations in a queue (filter by status) |
 | `rossum_search_annotations` | Search annotations across queues (filter by status, date range, workspace) |
 | `rossum_get_annotation` | Get annotation metadata, messages, and state |
@@ -157,7 +131,9 @@ The MCP server starts automatically when `rossum-sa` is enabled. Write and destr
 | `rossum_list_email_threads` | List email threads (filter by queue) |
 | `rossum_get_email_thread` | Get email thread details (replies, annotations) |
 | `rossum_get_organization` | Get organization details and feature flags |
+| `rossum_list_groups` | List available user roles (groups) and their IDs |
 | `rossum_list_users` | List organization users |
+| `rossum_create_user` | ✏️ Create a new user in the organization |
 | `rossum_list_audit_logs` | Query audit logs (admin only) |
 
 #### Data Storage
@@ -170,9 +146,12 @@ The MCP server starts automatically when `rossum-sa` is enabled. Write and destr
 | `data_storage_aggregate` | Run MongoDB aggregation pipelines |
 | `data_storage_list_indexes` | List collection indexes |
 | `data_storage_list_search_indexes` | List Atlas Search indexes |
+| `data_storage_insert` | ✏️ Insert one or more documents into a collection |
 | `data_storage_create_index` | ✏️ Create a database index |
 | `data_storage_create_search_index` | ✏️ Create an Atlas Search index |
 | `data_storage_drop_index` | ⚠️ Drop a database index |
+| `data_storage_drop_collection` | ⚠️ Drop a collection and all its indexes |
+| `data_storage_rename_collection` | ⚠️ Rename a collection |
 | `data_storage_drop_search_index` | ⚠️ Drop an Atlas Search index |
 
 ✏️ = write (requires approval) · ⚠️ = destructive (requires approval)

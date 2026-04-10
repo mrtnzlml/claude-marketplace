@@ -122,7 +122,7 @@ Schema IDs come from queue schema fields where `category` is `"datapoint"`. Only
 1. Prefer exact matching before fuzzy matching. Never do exact matching on names/addresses — use fuzzy for those.
 2. When `$search` is used:
    - Always follow with `$limit` (default 20 unless use case requires otherwise).
-   - Capture score via `$addFields: { "_score": { "$meta": "searchScore" } }`.
+   - Capture score via `$addFields: { "__score": { "$meta": "searchScore" } }`.
    - Filter low-confidence matches with a score threshold.
    - Combine multiple strategies: use `phrase` and `text` searches with appropriate `slop` and `fuzzy` settings.
 3. In fuzzy search, combine relevant parameters in `compound` queries using `must`, `should`, and `filter`.
@@ -144,6 +144,7 @@ Schema IDs come from queue schema fields where `category` is `"datapoint"`. Only
 7. Never deploy configuration to remote without user confirmation.
 8. Default result window is 20 for fuzzy/search stages. Runtime guardrail cap is 50 records for interactive previews.
 9. Never dump full datasets in user-facing responses.
+10. Do not rely on key order in multi-key `$sort` stages without checking key lengths. Rossum's JSON serialization sorts object keys by key length (shortest first), which silently reorders `$sort` keys and changes sort priority. Always ensure the primary sort key is shorter than (or equal in length to) secondary keys. Example: `{"__priority": 1, "id.poLineId": 1}` works because `__priority` (12 chars) < `id.poLineId` (12 chars — tied, so original order is preserved). If the primary key is longer, rename it with a shorter alias (prefix with `__`).
 
 ---
 
@@ -154,14 +155,14 @@ When fuzzy matching by name or address, raw `searchScore` can vary widely. Use l
 ```json
 {
   "$addFields": {
-    "score": { "$meta": "searchScore" }
+    "__score": { "$meta": "searchScore" }
   }
 },
 {
   "$addFields": {
-    "new_score": {
+    "__new_score": {
       "$divide": [
-        "$score",
+        "$__score",
         {
           "$add": [
             1,
@@ -184,20 +185,20 @@ When fuzzy matching by name or address, raw `searchScore` can vary widely. Use l
 },
 {
   "$addFields": {
-    "normalized_score": {
+    "__normalized_score": {
       "$divide": [
-        "$new_score",
-        { "$add": [1, "$new_score"] }
+        "$__new_score",
+        { "$add": [1, "$__new_score"] }
       ]
     }
   }
 },
-{ "$sort": { "normalized_score": -1 } },
-{ "$match": { "normalized_score": { "$gt": 0.8 } } }
+{ "$sort": { "__normalized_score": -1 } },
+{ "$match": { "__normalized_score": { "$gt": 0.8 } } }
 ```
 
-- The `new_score` divides raw score by the length ratio deviation, penalizing mismatched lengths.
-- The `normalized_score` applies a sigmoid-like normalization to bound values between 0 and 1.
+- The `__new_score` divides raw score by the length ratio deviation, penalizing mismatched lengths.
+- The `__normalized_score` applies a sigmoid-like normalization to bound values between 0 and 1.
 - Threshold `0.8` is typical for name-only matching; use `0.9` when combining name + address.
 
 ---
@@ -210,12 +211,12 @@ Use `$setWindowFields` to count matches and conditionally filter. This is useful
 {
   "$setWindowFields": {
     "output": {
-      "mainMatch": { "$count": {} }
+      "__mainMatch": { "$count": {} }
     }
   }
 },
 {
-  "$match": { "mainMatch": 1 }
+  "$match": { "__mainMatch": 1 }
 }
 ```
 
@@ -287,12 +288,12 @@ This pattern ensures: if exact match found, it's pre-selected; otherwise, the em
               }
             }
           },
-          { "$addFields": { "_score": { "$meta": "searchScore" } } },
-          { "$match": { "_score": { "$gte": 7 } } },
+          { "$addFields": { "__score": { "$meta": "searchScore" } } },
+          { "$match": { "__score": { "$gte": 7 } } },
           { "$limit": 20 },
           {
             "$project": {
-              "_id": 0, "internal_id": 1, "name": 1, "city": 1, "vatin": 1, "_score": 1
+              "_id": 0, "internal_id": 1, "name": 1, "city": 1, "vatin": 1, "__score": 1
             }
           }
         ]
@@ -363,13 +364,13 @@ This pattern ensures: if exact match found, it's pre-selected; otherwise, the em
               }
             }
           },
-          { "$addFields": { "_score": { "$meta": "searchScore" } } },
-          { "$match": { "_score": { "$gte": 6 } } },
+          { "$addFields": { "__score": { "$meta": "searchScore" } } },
+          { "$match": { "__score": { "$gte": 6 } } },
           { "$limit": 20 },
           {
             "$project": {
               "_id": 0, "po_internal_id": 1, "order_id_normalized": 1,
-              "supplier_id": 1, "order_reference": 1, "_score": 1
+              "supplier_id": 1, "order_reference": 1, "__score": 1
             }
           }
         ]
@@ -464,10 +465,10 @@ This pattern ensures: if exact match found, it's pre-selected; otherwise, the em
           },
           {
             "$setWindowFields": {
-              "output": { "mainMatch": { "$count": {} } }
+              "output": { "__mainMatch": { "$count": {} } }
             }
           },
-          { "$match": { "mainMatch": 1 } }
+          { "$match": { "__mainMatch": 1 } }
         ]
       },
       {
@@ -520,11 +521,11 @@ This pattern ensures: if exact match found, it's pre-selected; otherwise, the em
             }
           },
           { "$limit": 15 },
-          { "$addFields": { "score": { "$meta": "searchScore" } } },
+          { "$addFields": { "__score": { "$meta": "searchScore" } } },
           {
             "$addFields": {
-              "new_score": {
-                "$divide": ["$score", {
+              "__new_score": {
+                "$divide": ["$__score", {
                   "$add": [1, { "$abs": { "$subtract": [1, {
                     "$divide": [
                       { "$strLenCP": "$SUPPLIER_NAME" },
@@ -537,13 +538,13 @@ This pattern ensures: if exact match found, it's pre-selected; otherwise, the em
           },
           {
             "$addFields": {
-              "normalized_score": {
-                "$divide": ["$new_score", { "$add": [1, "$new_score"] }]
+              "__normalized_score": {
+                "$divide": ["$__new_score", { "$add": [1, "$__new_score"] }]
               }
             }
           },
-          { "$sort": { "normalized_score": -1 } },
-          { "$match": { "normalized_score": { "$gt": 0.8 } } },
+          { "$sort": { "__normalized_score": -1 } },
+          { "$match": { "__normalized_score": { "$gt": 0.8 } } },
           {
             "$project": {
               "id": "$SUPPLIER_REF", "name": "$SUPPLIER_NAME", "VAT_CODE": 1
@@ -585,11 +586,11 @@ This pattern ensures: if exact match found, it's pre-selected; otherwise, the em
             }
           },
           { "$limit": 15 },
-          { "$addFields": { "score": { "$meta": "searchScore" } } },
+          { "$addFields": { "__score": { "$meta": "searchScore" } } },
           {
             "$addFields": {
-              "new_score": {
-                "$divide": ["$score", {
+              "__new_score": {
+                "$divide": ["$__score", {
                   "$add": [1, { "$abs": { "$subtract": [1, {
                     "$divide": [
                       { "$strLenCP": {
@@ -611,13 +612,13 @@ This pattern ensures: if exact match found, it's pre-selected; otherwise, the em
           },
           {
             "$addFields": {
-              "normalized_score": {
-                "$divide": ["$new_score", { "$add": [1, "$new_score"] }]
+              "__normalized_score": {
+                "$divide": ["$__new_score", { "$add": [1, "$__new_score"] }]
               }
             }
           },
-          { "$sort": { "normalized_score": -1 } },
-          { "$match": { "normalized_score": { "$gt": 0.9 } } },
+          { "$sort": { "__normalized_score": -1 } },
+          { "$match": { "__normalized_score": { "$gt": 0.9 } } },
           {
             "$project": {
               "id": "$SUPPLIER_REF", "name": "$SUPPLIER_NAME", "VAT_CODE": 1
@@ -631,7 +632,7 @@ This pattern ensures: if exact match found, it's pre-selected; otherwise, the em
 ```
 
 **Key techniques:**
-- Stage 1 uses `$setWindowFields` + `mainMatch: 1` to auto-select only when exactly one result.
+- Stage 1 uses `$setWindowFields` + `__mainMatch: 1` to auto-select only when exactly one result.
 - Stage 2 uses `$search` with `regex` on a keyword index for VAT-in-name matching.
 - Stages 3-4 use length-ratio score normalization to penalize mismatched candidate lengths.
 - Stage 4 uses a higher threshold (0.9) because address adds more signal.
@@ -674,11 +675,11 @@ This pattern ensures: if exact match found, it's pre-selected; otherwise, the em
               }
             }
           },
-          { "$addFields": { "convertedPrice": { "$toDecimal": "{item_total_base}" } } },
-          { "$addFields": { "convertedAmount": { "$toDecimal": "$Goods_Line_Data.Extended_Amount" } } },
+          { "$addFields": { "__convertedPrice": { "$toDecimal": "{item_total_base}" } } },
+          { "$addFields": { "__convertedAmount": { "$toDecimal": "$Goods_Line_Data.Extended_Amount" } } },
           {
             "$match": {
-              "$expr": { "$eq": ["$convertedAmount", "$convertedPrice"] }
+              "$expr": { "$eq": ["$__convertedAmount", "$__convertedPrice"] }
             }
           }
         ]
@@ -730,7 +731,7 @@ This pattern ensures: if exact match found, it's pre-selected; otherwise, the em
           },
           {
             "$setWindowFields": {
-              "output": { "mainMatch": { "$count": {} } }
+              "output": { "__mainMatch": { "$count": {} } }
             }
           },
           {
@@ -752,7 +753,7 @@ This pattern ensures: if exact match found, it's pre-selected; otherwise, the em
           },
           {
             "$setWindowFields": {
-              "output": { "mainMatchWithDefault": { "$count": {} } }
+              "output": { "__mainMatchWithDefault": { "$count": {} } }
             }
           },
           {
@@ -761,11 +762,11 @@ This pattern ensures: if exact match found, it's pre-selected; otherwise, the em
                 "$cond": {
                   "if": {
                     "$and": [
-                      { "$gt": ["$mainMatchWithDefault", "$mainMatch"] },
-                      { "$gt": ["$mainMatchWithDefault", 1] }
+                      { "$gt": ["$__mainMatchWithDefault", "$__mainMatch"] },
+                      { "$gt": ["$__mainMatchWithDefault", 1] }
                     ]
                   },
-                  "then": { "$gt": ["$mainMatch", 0] },
+                  "then": { "$gt": ["$__mainMatch", 0] },
                   "else": { "$eq": [1, 1] }
                 }
               }

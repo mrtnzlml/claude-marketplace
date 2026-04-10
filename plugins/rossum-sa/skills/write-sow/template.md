@@ -8,29 +8,29 @@
 
 ## 1. Purpose
 
-[Brief description of the project: what business problem it solves, what document types will be processed, expected volumes, and what systems Rossum will integrate with. Keep to 2–4 sentences.]
+[What document types will be processed, expected volumes, and what systems Rossum will integrate with. 2–3 sentences max — state facts, not marketing language.]
 
 ## 2. Deliverables
 
 ### Deliverable 1: [Deliverable name]
 
-[What Rossum will deliver. Be specific: quantities, document types, field counts, integration targets. Do not include Customer prerequisites here — those belong in the Customer Cooperation section (Section 4). Use lists, code samples, or other formatting as needed to describe the deliverable clearly.]
+[What Rossum will deliver. Be specific: quantities, document types, field counts, integration targets. Keep it concise — enough to be measurable, not more. Do not include Customer prerequisites here — those belong in Section 4.]
 
 ### Deliverable …
 
 …
 
-### Deliverable N-2: Testing phase support and defect resolution
+### Deliverable N-2: Testing Phase Support and Defect Resolution
 
-Rossum will provide technical support throughout Customer's testing phase to ensure the implemented solution functions in accordance with the deliverables defined in this Statement of Work. This support is strictly limited to the identification and resolution of defects, which are defined as any functionality that fails to conform to the agreed-upon specifications. Any requests for enhancements, new features, or modifications that deviate from the documented scope will be considered a change request and will require a separate SOW amendment or a new agreement.
+Rossum will provide technical support during Customer's testing phase, limited to identifying and resolving defects — functionality that fails to conform to the specifications in this SOW. Enhancements or scope changes will require a separate agreement.
 
-### Deliverable N-1: Configuration deployment to production
+### Deliverable N-1: Configuration Deployment to Production
 
-Rossum will perform a structured promotion of the finalized configuration from the Development (DEV) environment to the Production (PROD) environment (and TEST environment if applicable). This ensures a consistent configuration baseline and functionality between the development and live environments. While the core workflows, validation rules, and business logic will be identical, the PROD environment will be updated with its own environment-specific parameters.
+Rossum will promote the finalized configuration from the DEV environment to PROD (and TEST if applicable), updating environment-specific parameters while preserving identical workflows and business logic.
 
-### Deliverable N: Solution as-built documentation
+### Deliverable N: Solution As-Built Documentation
 
-For its internal project management and quality assurance purposes, Rossum will compile a final technical document detailing the as-built configuration of the solution as of the project completion date. This document serves as a definitive technical snapshot of the implemented system, covering all configured workflows, data ingestion channels, validation rules, data transformation logic, integration endpoint settings and similar. A final version of this internal documentation can be provided to Customer for their records and future reference upon request.
+Rossum will compile a technical document detailing the as-built configuration — workflows, validation rules, integration settings, and data transformation logic — as of the project completion date. This document can be provided to Customer upon request.
 
 ### Out of Scope
 
@@ -60,3 +60,4 @@ The successful delivery of this project requires timely cooperation from Custome
 | C4 | [e.g., Designation of a primary point of contact available for weekly status calls and ad-hoc clarifications] | Project kickoff |
 | C5 | [e.g., Timely feedback on deliverables during the testing phase (within N business days of each delivery)] | Deliverable #N |
 | … | … | … |
+
