@@ -2030,7 +2030,7 @@ def main():
                 respond(request_id, {
                     "protocolVersion": "2024-11-05",
                     "capabilities": {"tools": {}},
-                    "serverInfo": {"name": "rossum-api", "version": "0.6.0"},
+                    "serverInfo": {"name": "rossum-api", "version": "0.7.0"},
                 })
             elif method == "notifications/initialized":
                 pass
