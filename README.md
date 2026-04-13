@@ -2,7 +2,7 @@
 
 Turn Claude into a Rossum implementation partner — audit hooks, analyze schemas, query Data Storage, extract documents, and generate SOWs, all from your terminal.
 
-6 skills · 8 reference packs · 53 MCP tools — [Claude Code plugin marketplace](https://code.claude.com/docs/en/plugin-marketplaces) for Rossum.ai.
+6 skills · 9 reference packs · 53 MCP tools — [Claude Code plugin marketplace](https://code.claude.com/docs/en/plugin-marketplaces) for Rossum.ai.
 
 <!-- TODO: add a terminal demo GIF here (e.g. invoice extraction or hook audit) -->
 
@@ -60,6 +60,7 @@ When `rossum-sa` is enabled, Claude automatically gets domain knowledge for:
 - **Data Storage API** — CRUD, indexing, search
 - **TxScript & Serverless Functions** — formula fields, extension development
 - **SAP Integration** — connector setup, mapping
+- **Export Pipeline (Request Processor)** — multi-stage API integration engine, SFTP export, auth, response handling
 - **Coupa Integration Baseline (CIB)** — schema, MDH matching, export pipeline, business rules
 - **prd2 CLI** — deployment and management commands
 

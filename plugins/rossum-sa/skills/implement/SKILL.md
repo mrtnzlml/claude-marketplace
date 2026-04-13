@@ -45,7 +45,7 @@ At each phase, reference the appropriate skill for detailed guidance rather than
 | 3 — Master Data Hub | `mdh-reference`, `mongodb-reference`, `data-storage-reference` |
 | 4 — Extensions & Serverless Functions | `txscript-reference`, `rossum-reference` (hook patterns) |
 | 5 — Business Rules | `rossum-reference` (business rules validation) |
-| 6 — Export Pipeline | `rossum-reference` (export mapping), `sap-reference` (if SAP) |
+| 6 — Export Pipeline | `export-pipeline-reference` (Request Processor config), `rossum-reference` (export mapping), `sap-reference` (if SAP) |
 | 7 — Test & Promote | `prd-reference` (deployment) |
 
 ---
