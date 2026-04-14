@@ -91,7 +91,7 @@ Create a formula field `[field_id]` in the queue schema (type: `formula`, `ui_co
 
 **Migration steps:**
 1. Add the formula field to the schema (or change the existing field's type to `formula`)
-2. Create the formula `.py` file in the queue's `formulas/` directory
+2. Create or edit the formula `.py` file in the queue's `formulas/` directory — **never edit the `formula` property in `schema.json`** (`prd2 push` syncs the `.py` file into the JSON automatically)
 3. Test that the formula produces the same results as the extension
 4. Remove the extension from the queue's hook chain in `queue.json`
 5. Delete the hook file if no other queues use it

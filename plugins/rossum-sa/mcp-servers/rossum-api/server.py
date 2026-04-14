@@ -2031,6 +2031,22 @@ def main():
                     "protocolVersion": "2024-11-05",
                     "capabilities": {"tools": {}},
                     "serverInfo": {"name": "rossum-api", "version": "0.7.0"},
+                    "instructions": (
+                        "SAFETY RULE — confirmation before writes: "
+                        "Do NOT call any write, update, patch, create, or delete tool "
+                        "unless the user has explicitly requested or approved the operation. "
+                        "This includes all rossum_create_*, rossum_patch_*, rossum_delete_* tools, "
+                        "all data_storage write tools (insert, update, delete, replace, bulk_write, drop), "
+                        "and any prd2 push/deploy commands. "
+                        "Read-only tools (list, get, find, aggregate, whoami) are fine without confirmation. "
+                        "When in doubt, describe what you intend to do and ask first. "
+                        "EDITING RULE — local file workflow: "
+                        "When modifying hook code or formula logic in a prd project, only edit the local .py files. "
+                        "Never edit the code field in hook JSON or the formula property in schema.json — "
+                        "prd2 push syncs .py files into JSON automatically. "
+                        "Do not call rossum_patch_hook or rossum_patch_schema to push code changes that "
+                        "should go through prd2 push instead."
+                    ),
                 })
             elif method == "notifications/initialized":
                 pass

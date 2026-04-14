@@ -1085,6 +1085,8 @@ TxScript is Rossum's Python-based scripting language used in both **Formula Fiel
 
 Formula fields are schema datapoints of type `formula` that compute derived values. They execute automatically before and after extensions.
 
+> **Editing rule:** When working with formula fields locally, always edit the `formulas/<field_id>.py` file. Never edit the `formula` property inside `schema.json` — `prd2` extracts formulas into `.py` files on pull and merges them back on push.
+
 **Key characteristics**:
 - Max 2000 characters per formula
 - Cannot make HTTP requests or access document objects

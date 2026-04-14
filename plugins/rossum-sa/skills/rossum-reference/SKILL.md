@@ -8,6 +8,14 @@ user-invocable: false
 
 This skill provides comprehensive reference documentation for the Rossum.ai document automation platform. For complete details, see [reference.md](reference.md).
 
+## Safety Rules
+
+**Do not call write/mutating API tools without explicit user approval.** This applies to all `rossum_create_*`, `rossum_patch_*`, `rossum_delete_*` tools, all `data_storage` write tools (insert, update, delete, replace, bulk_write, drop), and `prd2 push`/`prd2 deploy` commands. Read-only tools (list, get, find, aggregate, whoami) are fine without confirmation. When in doubt, describe what you intend to do and ask first.
+
+**Edit local `.py` files, not JSON.** When modifying hook code or formula logic in a prd project, only edit the `.py` file. Never edit the `code` field in hook JSON or the `formula` property in `schema.json` — `prd2 push` syncs `.py` files into JSON automatically. Do not use `rossum_patch_hook` or `rossum_patch_schema` to push code changes that should go through `prd2 push` instead.
+
+## When to use
+
 Use this knowledge when:
 - Answering questions about Rossum concepts, architecture, or features
 - Writing code that integrates with the Rossum API

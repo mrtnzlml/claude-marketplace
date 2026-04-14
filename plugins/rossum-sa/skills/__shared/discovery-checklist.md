@@ -67,7 +67,7 @@ project/
 - **Hooks/extensions** — JSON files in `hooks/` directories; look for `hook_type`, `config`, `sideload`, `settings_schema`; MDH matching configs and SFTP export configs are embedded inside hook settings. **When editing hook code, always edit the `.py` file, never the `code` field in the JSON** — `prd2` manages the synchronization.
 - **Rules** — JSON files in `rules/` directories with validation conditions, triggers, and actions (automation blockers, messages, labels)
 - **Labels** — JSON files in `labels/` directories defining tags for categorization (priority, status, department)
-- **Formula files** — Python `.py` files in `formulas/` subdirectories of each queue; these implement field calculations, data normalization, export mappings, and MDH lookup logic
+- **Formula files** — Python `.py` files in `formulas/` subdirectories of each queue; these implement field calculations, data normalization, export mappings, and MDH lookup logic. **Always edit the `.py` file, never the `formula` property in `schema.json`** — `prd2 push` syncs `.py` files into the schema JSON automatically.
 - **Email templates** — JSON files in `email_templates/` subdirectories for notification/rejection templates
 - **Dedicated Engines** — JSON files in `engines/` directories (custom AI extraction models)
 - **Deployment configs** — YAML files in `deploy_files/` defining environment-to-environment mappings (e.g., `dev_test.yaml`, `test_prod.yaml`); `prd_config.yaml` at the root defines org-level settings
