@@ -105,7 +105,7 @@ The MCP server starts automatically when `rossum-sa` is enabled. Write and destr
 
 | Tool | Description |
 |------|-------------|
-| `rossum_set_token` | Authenticate with a Rossum environment |
+| `rossum_set_token` | Authenticate with a Rossum environment (API token or username+password) |
 | `rossum_whoami` | Show authenticated user, organization, and role |
 
 #### Rossum API

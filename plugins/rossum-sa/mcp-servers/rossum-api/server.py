@@ -144,6 +144,32 @@ def _probe_token(base_url, token):
         return (False, f"{type(e).__name__}: {e}")
 
 
+def _login_with_password(base_url, username, password):
+    """Exchange username+password for an API token via /v1/auth/login. Returns (token, error)."""
+    req = urllib.request.Request(
+        f"{base_url}/api/v1/auth/login",
+        data=json.dumps({"username": username, "password": password}).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=15, context=_ssl_context) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+            token = data.get("key")
+            if not token:
+                return (None, "Login succeeded but no token returned.")
+            return (token, None)
+    except urllib.error.HTTPError as e:
+        body = e.read().decode("utf-8", errors="replace")[:300]
+        if e.code == 401:
+            return (None, "Invalid username or password.")
+        return (None, f"HTTP {e.code}: {body}")
+    except ssl.SSLError as e:
+        return (None, f"SSL error: {e}. Try: python3 -m pip install certifi")
+    except Exception as e:
+        return (None, f"{type(e).__name__}: {e}")
+
+
 def _invalidate_connection():
     """Clear cached connection state."""
     global _cached_base_url, _cached_token, _token_validated
@@ -398,16 +424,27 @@ _EMAIL_THREAD_FIELDS = (
 
 @_tool(
     "rossum_set_token",
-    "Set the Rossum API connection for this session. "
+    "Set the Rossum API connection for this session. Supports two authentication methods:\n"
+    "1. **API token** (admins): Pass or be prompted for a Bearer token.\n"
+    "2. **Username + password** (implementation partners): Pass username and password to "
+    "obtain a session token via Rossum's login API.\n\n"
     "Prefer calling without arguments — the user will be prompted interactively "
-    "for credentials, keeping the token out of the conversation. "
-    "Only pass token/baseUrl as arguments if the user has already typed them in the chat.",
+    "for credentials, keeping secrets out of the conversation. "
+    "Only pass arguments if the user has already typed them in the chat.",
     {
         "type": "object",
         "properties": {
             "token": {
                 "type": "string",
-                "description": "Rossum API Bearer token (omit to prompt interactively).",
+                "description": "Rossum API Bearer token. Use this OR username+password, not both.",
+            },
+            "username": {
+                "type": "string",
+                "description": "Rossum account email/username. Used with 'password' to obtain a token via login API.",
+            },
+            "password": {
+                "type": "string",
+                "description": "Rossum account password. Used with 'username' to obtain a token via login API.",
             },
             "baseUrl": {
                 "type": "string",
@@ -425,18 +462,39 @@ def handle_set_token(request_id, arguments):
     global _cached_base_url, _cached_token, _token_validated
 
     token = arguments.get("token", "")
+    username = arguments.get("username", "")
+    password = arguments.get("password", "")
     raw_url = arguments.get("baseUrl", "")
 
-    if not token or not raw_url:
+    # If we have both token and username+password, prefer token
+    if token and username:
+        username = ""
+        password = ""
+
+    # Interactive prompt when no credentials provided
+    if not token and not username and not raw_url:
         content = _elicit(
-            "Enter your Rossum API credentials.",
+            "Enter your Rossum API credentials.\n\n"
+            "**Option A — API token** (admins): fill in API Token and leave Username/Password empty.\n\n"
+            "**Option B — Username & password** (implementation partners): "
+            "fill in Username and Password, leave API Token empty.",
             {
                 "type": "object",
                 "properties": {
                     "token": {
                         "type": "string",
                         "title": "API Token",
-                        "description": "Rossum API Bearer token",
+                        "description": "Rossum API Bearer token (leave empty to use username+password)",
+                    },
+                    "username": {
+                        "type": "string",
+                        "title": "Username",
+                        "description": "Rossum account email (leave empty if using API token)",
+                    },
+                    "password": {
+                        "type": "string",
+                        "title": "Password",
+                        "description": "Rossum account password (leave empty if using API token)",
                     },
                     "baseUrl": {
                         "type": "string",
@@ -445,25 +503,71 @@ def handle_set_token(request_id, arguments):
                         "default": "https://elis.rossum.ai",
                     },
                 },
-                "required": ["token", "baseUrl"],
+                "required": ["baseUrl"],
             },
         )
         if content is None:
             return tool_result(
                 request_id,
                 "Credential prompt was cancelled or not supported by this client. "
-                "Call rossum_set_token(token='...', baseUrl='...') with explicit arguments instead.",
+                "Call rossum_set_token with explicit arguments instead:\n"
+                "  - With token: rossum_set_token(token='...', baseUrl='...')\n"
+                "  - With login: rossum_set_token(username='...', password='...', baseUrl='...')",
                 is_error=True,
             )
         token = content.get("token", token)
+        username = content.get("username", username)
+        password = content.get("password", password)
         raw_url = content.get("baseUrl", raw_url)
 
-    if not token:
-        return tool_result(request_id, "Missing 'token'.", is_error=True)
+    # Interactive prompt when we have credentials but no URL
+    if (token or username) and not raw_url:
+        content = _elicit(
+            "Enter the Rossum environment URL.",
+            {
+                "type": "object",
+                "properties": {
+                    "baseUrl": {
+                        "type": "string",
+                        "title": "Base URL",
+                        "description": "e.g. https://elis.rossum.ai",
+                        "default": "https://elis.rossum.ai",
+                    },
+                },
+                "required": ["baseUrl"],
+            },
+        )
+        if content is None:
+            return tool_result(
+                request_id,
+                "URL prompt was cancelled. Pass baseUrl explicitly.",
+                is_error=True,
+            )
+        raw_url = content.get("baseUrl", raw_url)
+
+    if not token and not username:
+        return tool_result(
+            request_id,
+            "No credentials provided. Supply either a token OR username+password.",
+            is_error=True,
+        )
 
     base_url = _validate_base_url(raw_url)
     if not base_url:
         return tool_result(request_id, f"Invalid base URL: {raw_url}. Must be HTTPS.", is_error=True)
+
+    # Username+password login flow
+    if not token and username:
+        if not password:
+            return tool_result(request_id, "Password is required when using username login.", is_error=True)
+        token, err = _login_with_password(base_url, username, password)
+        if err:
+            _invalidate_connection()
+            return tool_result(
+                request_id,
+                f"Login failed for {username} at {base_url}: {err}",
+                is_error=True,
+            )
 
     ok, detail = _probe_token(base_url, token)
     if not ok:
@@ -478,7 +582,8 @@ def handle_set_token(request_id, arguments):
     _cached_base_url = base_url
     _cached_token = token
     _token_validated = True
-    return tool_result(request_id, f"Connected to {base_url}. Token validated for this session.")
+    method = "username+password login" if username else "API token"
+    return tool_result(request_id, f"Connected to {base_url} via {method}. Token validated for this session.")
 
 
 @_tool(
