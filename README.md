@@ -2,7 +2,7 @@
 
 Turn Claude into a Rossum implementation partner — audit hooks, analyze schemas, query Data Storage, extract documents, and generate SOWs, all from your terminal.
 
-7 skills · 9 reference packs · 53 MCP tools — [Claude Code plugin marketplace](https://code.claude.com/docs/en/plugin-marketplaces) for Rossum.ai.
+8 skills · 9 reference packs · 53 MCP tools — [Claude Code plugin marketplace](https://code.claude.com/docs/en/plugin-marketplaces) for Rossum.ai.
 
 <!-- TODO: add a terminal demo GIF here (e.g. invoice extraction or hook audit) -->
 
@@ -42,6 +42,7 @@ component (🟢 healthy, 🟡 warning, 🔴 broken).
 | `/rossum-sa:analyze [path]` | Check an implementation for configuration errors |
 | `/rossum-sa:document [path]` | Produce a queue-focused reference document |
 | `/rossum-sa:implement` | Plan and execute an integration project end-to-end |
+| `/rossum-sa:analyze-org-for-upsell [org]` | Orchestrator that inspects a live Rossum org and surfaces ranked upsell / expansion opportunities |
 | `/rossum-sa:refine-deployment [deploy-file] [impl-path]` | Enhance prd2 deploy files with target IDs and attribute overrides |
 | `/rossum-sa:upgrade [path]` | Upgrade deprecated extensions to modern formula fields |
 
