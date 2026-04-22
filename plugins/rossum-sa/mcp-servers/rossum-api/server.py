@@ -1861,6 +1861,40 @@ def handle_list_schemas(request_id, arguments):
 
 
 @_tool(
+    "rossum_queue_automation",
+    "Returns automation statistics and blocker breakdown for a queue over a date range. "
+    "Shows why documents were not auto-exported (e.g. missing fields, validation errors). "
+    "Dates must be in YYYY-MM-DD format.",
+    {
+        "type": "object",
+        "required": ["queue_id", "begin_date", "end_date"],
+        "properties": {
+            "queue_id": {
+                "type": "integer",
+                "description": "The queue ID.",
+            },
+            "begin_date": {
+                "type": "string",
+                "description": "Start of the period in YYYY-MM-DD format (inclusive).",
+            },
+            "end_date": {
+                "type": "string",
+                "description": "End of the period in YYYY-MM-DD format (inclusive).",
+            },
+        },
+        "additionalProperties": False,
+    },
+    annotations=_READ_ONLY,
+)
+def handle_queue_automation(request_id, arguments):
+    _rossum_post(
+        request_id,
+        f"/api/v1/queues/{arguments['queue_id']}/automation",
+        {"begin_date": arguments["begin_date"], "end_date": arguments["end_date"]},
+    )
+
+
+@_tool(
     "rossum_list_workspaces",
     "Lists all workspaces in the Rossum organization. Workspaces group queues "
     "and define organizational boundaries.",
