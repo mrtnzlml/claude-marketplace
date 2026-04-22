@@ -32,6 +32,21 @@ component (🟢 healthy, 🟡 warning, 🔴 broken).
 /plugin install superpowers@claude-plugins-official
 ```
 
+### Running from a local checkout (feature branch)
+
+To test a feature branch before it's published to the marketplace, clone the repo and point Claude Code at the plugin directories with `--plugin-dir`.
+
+Example using the [`teamd-hackathon`](https://github.com/mrtnzlml/claude-marketplace/tree/teamd-hackathon) branch:
+
+```bash
+git clone -b teamd-hackathon https://github.com/mrtnzlml/claude-marketplace.git rossum-claude-plugin
+
+claude --plugin-dir rossum-claude-plugin/plugins/rossum-sa \
+       --plugin-dir rossum-claude-plugin/plugins/nerossum
+```
+
+Each `--plugin-dir` loads one plugin; omit the ones you don't need.
+
 ## ⚡ Skills
 
 ### `rossum-sa`
