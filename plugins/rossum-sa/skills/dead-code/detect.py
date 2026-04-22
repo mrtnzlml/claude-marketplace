@@ -8,7 +8,9 @@ Six high-confidence checks:
   2. hooks with no queue attachment (scheduled import hooks excluded)
   3. disabled hooks
   4. dead rules — disabled or queues: []
-  5. unused labels — no enabled rule action references them
+  5. label candidates — no enabled rule action references them (not proof of
+     death: labels can be applied manually; the skill must verify annotation
+     usage via the Rossum API before deleting)
   6. unused engines — no queue.json.engine points at them
 
 Emits a markdown report. No JSON mode, no fuzzy checks (schema field
@@ -147,8 +149,10 @@ def main(env_dir: str) -> None:
     section("Dead rules", dead_rules,
             lambda r: f"**{r.get('name')}** (id={r.get('id')}) `{r['_path']}` — "
                       f"{'disabled' if r.get('enabled') is False else 'queues: []'} → **delete**")
-    section("Unused labels", unused_labels,
-            lambda l: f"**{l.get('name')}** (id={l.get('id')}) `{l['_path']}` → **delete**")
+    section("Label candidates — no rule references (verify annotation usage before deleting)", unused_labels,
+            lambda l: f"**{l.get('name')}** (id={l.get('id')}) `{l['_path']}` → "
+                      f"**verify with `rossum_search_annotations` `labels={l.get('id')}`, "
+                      f"delete only if 0 annotations use it**")
     section("Unused engines", unused_engines,
             lambda e: f"**{e.get('name')}** (id={e.get('id')}) `{e['_path']}` → **delete**")
 

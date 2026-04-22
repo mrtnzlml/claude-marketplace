@@ -29,16 +29,22 @@ An earlier version of this skill let a subagent do freeform analysis and it inve
    ```
    Output is markdown. Present it verbatim (or lightly framed). Don't re-paraphrase findings as aggregate prose — names are what's actionable.
 
-3. **Spot-check at least 2 findings on disk** before presenting. Examples:
+3. **Verify label candidates against the API.** The script's "Label candidates" section lists labels with no rule references, but labels can also be applied manually by users — so rule-unreferenced ≠ dead. For each candidate, call `rossum_search_annotations` with `labels=<id>` and `max_results=1`:
+   - 0 annotations → the label really is unused. Keep the finding, mark it as confirmed.
+   - ≥1 annotations → the label is in manual use. **Remove it from the report** and note the annotation count.
+
+   Do this before presenting. If the MCP is not connected, say so and leave the label section marked "unverified — run `rossum_set_token` and re-check".
+
+4. **Spot-check at least 2 other findings on disk** before presenting. Examples:
    - Orphan hook: open the JSON and confirm `queues: []`.
-   - Unused label: `rg -n "<label-id>" <env>/rules/` returns 0 hits.
    - Unused engine: `rg "engines/<id>" <env>/workspaces/` returns 0 hits.
+   - Dead rule: open the JSON and confirm `enabled: false` or `queues: []`.
 
    If any spot-check contradicts the output, the script has a bug — fix it, don't edit the report.
 
-4. **Append caveats** (see below) — the script can't see them.
+5. **Append caveats** (see below) — the script can't see them.
 
-5. **Report only.** The user deletes.
+6. **Report only.** The user deletes.
 
 ## What the script checks
 
@@ -50,7 +56,7 @@ Six high-confidence categories, all derivable from file structure:
 | 2 | Hooks with no queue attachment | `queues: []` — **except** scheduled hooks (non-empty `config.schedule.cron`), which legitimately run without a queue (cron-triggered imports, housekeeping, doctors, etc.) |
 | 3 | Disabled hooks | `active: false` |
 | 4 | Dead rules | `enabled: false` OR `queues: []` |
-| 5 | Unused labels | no enabled rule action payload references the label id/url |
+| 5 | Label candidates | no enabled rule action payload references the label id/url. **Not proof of death** — labels can be applied manually by users. The skill verifies each candidate via `rossum_search_annotations?labels=<id>` and drops any label that's actually assigned to annotations. |
 | 6 | Unused engines | no `queue.json.engine` URL points at this engine |
 
 ## What the script deliberately does NOT check
