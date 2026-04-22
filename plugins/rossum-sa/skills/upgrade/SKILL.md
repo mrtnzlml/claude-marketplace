@@ -1,6 +1,6 @@
 ---
 name: upgrade
-description: Upgrade deprecated Rossum extensions to modern equivalents. Finds old Copy & Paste, Find & Replace, Value Mapping, and Date Calculation extensions and produces replacement formula fields with migration steps. Use when modernizing a customer implementation. Triggers on requests like "upgrade extensions", "migrate to formulas", "replace deprecated hooks", "modernize this setup".
+description: Upgrade deprecated Rossum extensions to modern equivalents and bump old Python runtimes on function hooks to python3.12. Finds old Copy & Paste, Find & Replace, Value Mapping, and Date Calculation extensions and produces replacement formula fields with migration steps. Use when modernizing a customer implementation. Triggers on requests like "upgrade extensions", "migrate to formulas", "replace deprecated hooks", "upgrade python runtime", "modernize this setup".
 argument-hint: [path-to-implementation]
 allowed-tools: Read, Grep, Glob, Bash, Agent
 context: fork
@@ -8,20 +8,21 @@ context: fork
 
 # Upgrade Rossum Implementation
 
-You are a Rossum.ai Solution Architect upgrading a customer's implementation from deprecated extensions to modern formula fields.
+You are a Rossum.ai Solution Architect upgrading a customer's implementation from deprecated extensions to modern formula fields and bringing serverless function hooks onto the current Python runtime.
 
 > Path or context: $ARGUMENTS
 
 ## Scope
 
-This upgrade covers **value transformations and date calculations** — extensions that copy, transform, map field values, or compute dates:
+This upgrade covers **value transformations, date calculations, and Python runtime versions** — extensions that copy, transform, map field values, compute dates, plus any function hook pinned to an outdated Python runtime:
 
-| Deprecated Extension | Replacement | Why |
-|---------------------|-------------|-----|
+| Deprecated Extension / Runtime | Replacement | Why |
+|-------------------------------|-------------|-----|
 | Copy & Paste Values | Formula field | Extension is deprecated and no longer maintained |
 | Find & Replace Values | Formula field | Extension is deprecated and no longer maintained |
 | Value Mapping | Formula field | Formula fields are simpler, faster, and version-controlled |
 | Date Calculation | Formula field | Extension is deprecated and no longer maintained |
+| Function hook `config.runtime` = `python3.8` / `python3.9` / `python3.10` / `python3.11` | `python3.12` | Older runtimes are deprecated on the Rossum platform |
 
 ## Phase 1: Find Deprecated Extensions
 
@@ -31,8 +32,9 @@ Use the provided path (or current directory if none given). Refer to `skills/__s
 2. Identify deprecated extensions by **grepping hook files** for these patterns:
    - Names containing: `Copy`, `Paste`, `Find`, `Replace`, `Value Mapping`, `Mapping`, `Date Calculation`, `Date Calc`
    - Hook URLs containing: `copy-paste`, `find-replace`, `value-mapping`, `date-calculation`
-3. For each match, read the **full hook JSON** — especially `settings` (the transformation rules) and `queues` (which queues use it)
-4. Find the **schema** for each affected queue (`**/schema.json` in the matching queue directory) so you know what fields exist
+3. Identify outdated Python runtimes on function hooks by **grepping hook files** for `"runtime":` and collecting every value that is not `"python3.12"` (e.g., `python3.8`, `python3.9`, `python3.10`, `python3.11`). Only hooks of `"type": "function"` have a runtime field — webhook/connector hooks do not.
+4. For each match, read the **full hook JSON** — especially `settings` (the transformation rules) and `queues` (which queues use it). For function hooks, also read the corresponding `.py` file(s) so you can flag any code that won't run on 3.12.
+5. Find the **schema** for each affected queue (`**/schema.json` in the matching queue directory) so you know what fields exist
 
 Do NOT produce output during this phase. Read everything first.
 
@@ -61,6 +63,23 @@ Settings contain a `calculations` array. Each calculation has:
 
 All fields referenced in expressions (except `timedelta` parameters) must be of type `date` in the schema. Calculations are evaluated in order — later entries can override earlier ones for the same `target_field` (useful for conditional overrides).
 
+### Python Runtime (function hooks)
+
+For each function hook with `config.runtime` older than `python3.12`, note:
+
+- The current runtime value and the hook's name/ID.
+- The hook's code source: typically a sibling `.py` file managed by `prd2` (preferred) or, as a fallback, the inline `config.code` string.
+- Whether the code uses anything removed or meaningfully changed in Python 3.12:
+  - `distutils` (removed in 3.12) — replace with `packaging`, `shutil`, or `sysconfig`.
+  - `imp` (removed in 3.12) — replace with `importlib`.
+  - `asynchat`, `asyncore`, `smtpd` (removed in 3.12).
+  - `collections.Callable`/`collections.Mapping`/etc. aliases (removed in 3.10) — import from `collections.abc`.
+  - Implicit `datetime.utcnow()` usage — still works but is deprecated; prefer `datetime.now(timezone.utc)`.
+  - `ssl.wrap_socket` (removed in 3.12) — use `SSLContext.wrap_socket`.
+  - Any third-party dependency pinned in the hook that requires an older Python.
+
+If the code uses none of the above, the runtime bump is a pure `config.runtime` change with no code edits required.
+
 ## Phase 3: Produce Upgrade Report
 
 Write a markdown file named `UPGRADE-[customer-or-folder-name].md`:
@@ -70,7 +89,24 @@ Write a markdown file named `UPGRADE-[customer-or-folder-name].md`:
 
 ## Summary
 
-One paragraph: how many deprecated extensions were found, which queues are affected, overall migration effort.
+One paragraph: how many deprecated extensions were found, how many function hooks are on outdated Python runtimes, which queues are affected, overall migration effort.
+
+## Python Runtime Upgrades
+
+### [Hook Name] (ID: [hook_id])
+
+**Current runtime:** `python3.X`
+**Target runtime:** `python3.12`
+**Queues:** List of queues that use this hook.
+**Code compatibility:** Either "No changes required — code is compatible with 3.12" or a bullet list of specific code changes needed (e.g., "replaces `distutils.util.strtobool` with a local helper").
+
+**Migration steps:**
+1. If code changes are needed, edit the hook's `.py` file (never the `code` field in the hook JSON — `prd2 push` syncs it).
+2. Change `config.runtime` from `python3.X` to `python3.12` in the hook JSON.
+3. Run `prd2 push` to deploy.
+4. Trigger the hook on a representative document and confirm it still runs without error.
+
+(Repeat for each function hook on an outdated runtime. If every affected hook is a pure runtime bump with no code changes, you may collapse this into a single table listing hook name, ID, current runtime, and queues.)
 
 ## Extensions to Upgrade
 
@@ -103,6 +139,8 @@ Create a formula field `[field_id]` in the queue schema (type: `formula`, `ui_co
 - [ ] All formula fields added to schemas
 - [ ] All formula `.py` files created
 - [ ] All deprecated extensions removed from queue hook chains
+- [ ] All function hooks on outdated runtimes bumped to `python3.12`
+- [ ] Any code incompatible with 3.12 rewritten in the hook's `.py` file
 - [ ] Tested in dev/sandbox before promoting to production
 ```
 
@@ -177,7 +215,8 @@ datetime.strptime(field.date_issue, "%Y-%m-%d") + timedelta(days=int(field.terms
 
 ## Important
 
-- Only upgrade extensions you actually find. Do not invent issues.
+- Only upgrade extensions and runtimes you actually find. Do not invent issues.
 - If an extension's settings are too complex for a formula (>2000 chars or requires HTTP), note it as "requires serverless function" and skip the formula generation.
 - When multiple queues share the same extension, produce one formula per queue (they may need slight variations if schemas differ).
 - Preserve the exact transformation logic — the formula must produce identical results to the extension it replaces.
+- For runtime bumps, do not edit the inline `code` field or rewrite logic you don't need to rewrite. Bump the `runtime` string and only touch the `.py` source when a specific 3.12 incompatibility requires it.
