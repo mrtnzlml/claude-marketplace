@@ -17,3 +17,5 @@ Output:
 Provide a table of each suggestion with possible impact and effort.
 Follow this table with more detailed description of the suggestion but without going into too much detail or solutioning.
 Always list affected hooks or queues where the improvements are to be done.
+
+6. ask which improvements should be considered and included and then use skill write-sow to create an output
