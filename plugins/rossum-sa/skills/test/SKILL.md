@@ -26,7 +26,7 @@ This applies to:
 - Uploading documents to the test queue
 - PATCHing annotation fields during replay
 - Confirming annotations during replay
-- `prd2 push` and `prd2 deploy` commands
+- `prd2 push` commands (scoped via `-io` to indexed files only — confirm the file list before executing)
 
 Read-only operations are fine without confirmation: listing hooks/schemas/annotations, `rossum_get_document`, `rossum_get_annotation_content`, `data_storage_find`/`aggregate` for reads.
 
@@ -107,7 +107,7 @@ For Pattern 2, also ask whether the external service is pointed at the test envi
 The skill needs **two coexisting states**: a `source` running the old config (for historical ground truth + optional pre-upgrade determinism check) and a `target` running the upgraded config (for replay). Three deployment shapes satisfy this:
 
 - **Separate sandbox org with the upgrade pushed** (preferred — strongest isolation, independent credentials, no shared MDH/hooks).
-- **Sibling test queue in the same org as prod**, created via `prd2 deploy` with a renamed queue (e.g., `Netherlands_test_<date>`). Same org → same MDH datasets, possibly shared hook endpoints. Usable when no sandbox is available. Caveats to surface to the user before approving:
+- **Sibling test queue in the same org as prod** (e.g., `Netherlands_test_<date>`). Same org → same MDH datasets, possibly shared hook endpoints. Usable when no sandbox is available. Caveats to surface to the user before approving:
   - Hooks referenced by URL must be duplicated in the deploy, not re-referenced — otherwise the upgrade will replace the prod hook for prod too.
   - MDH write operations in the upgraded config would hit the prod dataset. Read-only queries are fine.
   - External export services (Pattern 2): confirm their filter. If they filter by queue ID, the test queue is invisible to them (safe). If they filter by org or status, they *will* pick up the test queue (unsafe without further gating).
@@ -116,7 +116,17 @@ The skill needs **two coexisting states**: a `source` running the old config (fo
 
 Never run replay against the source/prod queue itself.
 
-**If the upgrade is local-only** — `upgrade` skill produced modified files but nothing has been pushed yet — Phase 3 cannot replay against files on disk. Before Phase 3, the upgraded config MUST be deployed to a target via `prd2 push` / `prd2 deploy`. Offer to do it (gated write) or pause until the user does. Creating a sibling test queue autonomously is possible but involves a long sequence of write ops (queue + schema + rule + hook duplication, plus cleanup); prefer driving this via `prd2` with an explicit deploy file rather than ad-hoc API calls.
+**If the upgrade is local-only** — `upgrade` skill produced modified files but nothing has been pushed yet — Phase 3 cannot replay against files on disk. Before Phase 3, the upgraded config must be pushed to a target via `prd2 push`. (`prd2 deploy` is not used — it requires a pre-existing deploy template.)
+
+**Scope the push to only the upgrade's files**, not everything dirty in the working tree:
+
+1. Start from a clean target-env subdirectory, or at minimum know what's dirty in it.
+2. Stage exactly the files the upgrade modified: `git add <target-env-dir>/<files-from-upgrade-manifest>`. The `UPGRADE-*.md` produced by the `upgrade` skill lists the affected hooks/formulas/rules; derive file paths from those. If no manifest exists, use `git status <target-env-dir>` to review and stage selectively.
+3. Run `prd2 push <target-env> -io` — the `-io` / `--indexed-only` flag pushes only files that are in the git index, leaving unindexed dirty files (unrelated WIP, test artifacts) untouched on the remote.
+4. **Gate the push call.** Before executing, summarize the staged file list + destination for the user and wait for explicit "yes" — this is a remote write.
+5. After replay + report, the user decides whether to commit the staged changes or reset them.
+
+Autonomous queue creation (new test queue from scratch via raw API calls) is possible but involves 10+ write ops and cleanup obligations; prefer the `prd2 push` path with a sibling-queue-naming convention over ad-hoc API calls.
 
 **Backup prerequisite?** A pre-upgrade `prd2 pull` of the source is **not** required by this skill — historical annotations come from the live source env, not from files. A pull backup is only essential if the upgrade has already been applied destructively to the only env (no source running the old config anywhere). In that scenario, behavioral replay is impossible and the skill can only do static-from-manifest review.
 
