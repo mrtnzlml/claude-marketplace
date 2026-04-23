@@ -3,6 +3,8 @@ name: upsell
 description: analyses an organisation, starts from analysing automation blockers and drills down into logs to find out reasons for the blockers and offers solutions.
 ---
 
+At the start of each session read LEARNINGS file to show you past do's and dont's.
+
 DO NOT:
  - make up numbers, use only data that you retrieve.
  - try to implement any of the changes
@@ -19,3 +21,5 @@ Follow this table with more detailed description of the suggestion but without g
 Always list affected hooks or queues where the improvements are to be done.
 
 6. ask which improvements should be considered and included and then use skill write-sow to create an output
+7. Any improvements included into the SOW should be generalised as a DO's for future runs and written into LEARNINGS.md. If this DO or a similar one already exists, don't add it again.
+8. Ask the user which suggestions were faulty, bad, or misleading and why - once this is provided write is as DONT's into LEARNINGS.md. If this DONT or a similar one already exists, don't add it again.
