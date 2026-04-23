@@ -8,6 +8,7 @@ At the start of each session read LEARNINGS file to show you past do's and dont'
 DO NOT:
  - make up numbers, use only data that you retrieve.
  - try to implement any of the changes
+ - do not call automation autopilot, we call it automation
 
 1. Ask user for an organisation ID, base URL and API token.
 2. use the information to query endpoint "rossum_queue_automation" with reasonable timeframe - past 2 months is enough. analyse all PRODUCTION queues in the organisation. Focus only on production ones - you should be able to tell by the workspace/queue name. If there's no word production found, exclude any queues/workspaces that contain any of TEST DEV UAT words.
@@ -19,6 +20,7 @@ Output:
 Provide a table of each suggestion with possible impact and effort.
 Follow this table with more detailed description of the suggestion but without going into too much detail or solutioning.
 Always list affected hooks or queues where the improvements are to be done.
+Create 2 categories in the table - one are technical tasks that require a more involved changes, new implementations. These kind of tasks will be categorised for Solution Architect (SA). Observations related to automation, thresholds tuning, suggestions that might need changes to the customers processes assign to Technical Account Manager (TAM)
 
 6. ask which improvements should be considered and included and then use skill write-sow to create an output
 7. Any improvements included into the SOW should be generalised as a DO's for future runs and written into LEARNINGS.md. If this DO or a similar one already exists, don't add it again.
