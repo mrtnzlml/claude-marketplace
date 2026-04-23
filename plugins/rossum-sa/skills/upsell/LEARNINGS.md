@@ -6,7 +6,7 @@
 
 - **When `remit-to-addresses` (or similar nested Coupa fields) appear in a JMESPath result mapping, check whether the field is an array or an object.** In `suppliers_prod`, `remit-to-addresses` is an array — direct property access like `"remit-to-addresses"."remit-to-code"` will always fail. The correct form is `"remit-to-addresses"[0]."remit-to-code"`. Also check for null/empty array cases and recommend null-safe fallback expressions.
 
-- **Always check for `automation_disabled` at annotation level as a primary blocker.** 100% `automation_disabled` across a queue almost always means autopilot was never switched on at the queue level after a TEST→PROD migration, not a hook-level issue. Distinguish it from extension-type blockers before diagnosing hooks.
+- **Always check for `automation_disabled` at annotation level as a primary blocker.** 100% `automation_disabled` across a queue almost always means automation was never switched on at the queue level after a TEST→PROD migration, not a hook-level issue. Distinguish it from extension-type blockers before diagnosing hooks.
 
 - **Look at `_memorization_*` collections alongside primary datasets when diagnosing MDH match failures.** Memorization records store a minimal structure (sender_name, sender_address, sender_match, annotation_id, created_at) and do not carry the rich fields (VendorNumber, id, etc.) that primary dataset records do. If a hook reads a field that only exists in the primary dataset, it will fail silently when a memorization record wins the cascade.
 
