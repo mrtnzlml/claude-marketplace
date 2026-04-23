@@ -16,6 +16,12 @@
 
 - **When a queue shows near-zero automation (< 5%) and was launched recently (< 6 months), treat it as a multi-factor failure requiring a structured investigation across formula configuration, validation sources, hook settings, and AI training data.** Do not diagnose from blocker percentages alone — individual blockers often cascade (e.g., missing validation source → formula error → item_amount_total cascade). Sequence the fixes: configuration gaps first, then formula logic, then hook tuning, then training assessment.
 
+- **When a hook returns HTTP 422 "Failed to update additional mappings. Make sure no other extension updates the target matching datapoint before matching is run", the issue is a hook execution ordering race condition — not a data or schema problem.** The fix can be either hook priority/ordering or user is deleting drop down value of the matched field.
+
+- **When duplicate-handling extension returns "body.document.s3_name: Input should be a valid string", the document was submitted without file metadata — not a hook bug.** Commonly happens on API-uploaded documents. The fix is null-safe handling in the extension, not changes to the submission flow.
+
+- **When a field shows `error_message` blocker on 90%+ of a queue, check first if it is a required export field with no population logic.** A missing formula or hook assignment rather than a formula error is more likely at that occurrence rate. Confirm by looking at automation attempt logs ("Trying to automate") for `type: error, content: required`.
+
 ## DON'Ts
 
 - **Do not suggest fixing SSL certificate issues on Rossum-hosted extensions as a project team deliverable.** SSL certificate renewal for extensions hosted on `*.rossum-ext.app` or similar infrastructure is an infrastructure-level concern, not something the implementation project team can resolve through configuration. Flag it as an infrastructure ticket, not a SOW item.
