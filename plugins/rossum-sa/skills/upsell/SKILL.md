@@ -20,7 +20,9 @@ Output:
 Provide a table of each suggestion with possible impact and effort.
 Follow this table with more detailed description of the suggestion but without going into too much detail or solutioning.
 Always list affected hooks or queues where the improvements are to be done.
-Create 2 categories in the table - one are technical tasks that require a more involved changes, new implementations. These kind of tasks will be categorised for Solution Architect (SA). Observations related to automation, thresholds tuning, suggestions that might need changes to the customers processes assign to Technical Account Manager (TAM)
+Create 2 categories in the table
+First are technical tasks that require a more involved changes, new configurations, new implementations. These kind of tasks will be categorised for Solution Architect (SA).
+Observations related to automation, thresholds tuning, suggestions that might need changes to the customers processes assign to Technical Account Manager (TAM)
 
 6. ask which improvements should be considered and included and then use skill write-sow to create an output
 7. Any improvements included into the SOW should be generalised as a DO's for future runs and written into LEARNINGS.md. If this DO or a similar one already exists, don't add it again. You need to generalise, dont write any specific field names, queues or hook IDs. the context is important.
