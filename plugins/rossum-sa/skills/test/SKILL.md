@@ -309,7 +309,7 @@ Before running replay, explicitly configure and **confirm with the user**:
 
 For each annotation, compare historical before-snapshot vs. after-snapshot:
 
-- **Field values** — match per `(schema_id, path, row_index)` with the value-normalization spec below
+- **Field values** — always compare **byte-exact** per `(schema_id, path, row_index)`. Do not collapse formatting differences into matches; they get classified (see below), not hidden.
 - **Messages** — match by (field, content, severity). **When Axis "hook → native rules" is in scope, treat message differences as first-class diffs, not soft-fail.**
 - **Automation blockers** — match by `(schema_id, type)` first, then message content. **First-class diff result** — a missing or added automation_blocker is always a hard-fail unless explicitly marked out-of-scope.
 - **Export signal** — depending on Phase 0d:
@@ -318,12 +318,20 @@ For each annotation, compare historical before-snapshot vs. after-snapshot:
 - **Final status** — exact match (confirmed, exported, rejected, etc.)
 - **Automation-downgrade** — prod annotation was `automated=true` but test annotation stayed in `to_review` / has a new blocker. **First-class diff result** — hard-fail regardless of field parity, because the business outcome (auto-processing rate) changed.
 
-**Value normalization (before comparing two field values):**
-- Strip leading/trailing whitespace, including non-breaking spaces (`\u00a0`).
-- If both sides parse as numeric: compare as `Decimal`; treat `"7 452.300000"`, `"7452.3"`, `"7 452,3"` (EU locale) as equal. Tolerate thousands separators in any of `[" ", "\u00a0", ",", "."]` by stripping them after detecting the decimal separator.
-- Drop trailing zeros from decimal fractions (`"1.000000"` → `"1"`).
-- `None`, `""`, and the string `"null"` are equivalent.
-- Case-sensitive string compare otherwise.
+**Normalization is for severity classification, never for hiding diffs.** The rule:
+
+1. **Start byte-exact.** If two values are byte-identical → pass, no diff reported.
+2. **If they differ, the diff is always reported.** Every byte-difference appears in the per-annotation table and the grouped-failures section — the user must be able to see what changed to judge whether downstream consumers care (Coupa XML schemas, SFTP fixed-width fields, regex validators, accounting systems' strict formatters).
+3. **Normalization only decides severity.** Compute a normalized form of each side using the spec below. If the normalized forms match but the raw bytes don't → class `numeric_formatting` or `locale_formatting` (soft-fail). If normalized forms also differ → apply the rest of the classification ladder (hard-fail territory).
+
+**Normalization spec (severity-only, not match-decider):**
+- Strip leading/trailing whitespace including non-breaking spaces (`\u00a0`).
+- If both sides parse as numeric: compare `Decimal` values; thousands separators in `[" ", "\u00a0", ",", "."]` stripped after detecting the decimal separator.
+- Drop trailing zeros from decimal fractions for the normalized comparison only (raw values preserved in the report).
+- `None`, `""`, and `"null"` are equivalent for presence checks.
+- Case-sensitive otherwise.
+
+Do not apply normalization during Phase 3 replay — the PATCH sends the exact historical value, and any downstream format sensitivity is part of the behavior being tested.
 
 **Diff classification ladder (apply top-down, first match wins):**
 
@@ -334,12 +342,13 @@ For each annotation, compare historical before-snapshot vs. after-snapshot:
 | `ocr_drift_line_items` | soft-fail | diff lives under a multivalue subtree whose prod row count was 0 and human-edited-only mode is active |
 | `formula_crash` | **P0 critical** | blocker message contains `Traceback`, `Exception`, or `TypeError` |
 | `automation_downgrade` | hard-fail | prod `automated=true` and test has any new blocker |
-| `hot_surface_value` | hard-fail | schema_id in the "fields to pin" list from Phase 0 and values differ after normalization |
+| `hot_surface_value` | hard-fail | schema_id in the "fields to pin" list from Phase 0 and normalized forms also differ |
 | `blocker_missing` | hard-fail | prod had a blocker of type `extension` or `error_message` that the test does not reproduce |
 | `blocker_new` | hard-fail if prod was automated, else soft-fail | test has a new blocker absent in prod |
-| `numeric_formatting` | soft-fail | both sides parse as numeric and are equal after `Decimal` normalization |
+| `numeric_formatting` | soft-fail | raw bytes differ but normalized `Decimal` values match — diff is still reported with both raw strings shown |
+| `locale_formatting` | soft-fail | raw bytes differ due to separator/whitespace only — diff is still reported |
 | `message_wording` | soft-fail | same schema_id, same blocker type, only message text differs |
-| `field_value` | hard-fail | fallback for value diffs not absorbed above |
+| `field_value` | hard-fail | fallback for value diffs not absorbed above (raw bytes differ AND normalized forms differ) |
 
 Classify each annotation's overall verdict as **pass** (no hard-fails), **soft-fail** (soft-fails only), or **hard-fail** (≥1 hard-fail or P0).
 
