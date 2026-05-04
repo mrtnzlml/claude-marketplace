@@ -2,6 +2,7 @@
 """MCP server for Rossum APIs."""
 
 import json
+import re
 import ssl
 import sys
 import urllib.error
@@ -91,6 +92,25 @@ def _elicit(message, schema):
 
 
 # --- URL validation ---
+
+
+_BEARER_RE = re.compile(r"[Bb]earer\s+([^\s\"']+)")
+_HTTPS_URL_RE = re.compile(r"https://[^\s\"']+")
+
+
+def _parse_connection_string(text):
+    """Extract (token, base_url) from a curl-style snippet.
+
+    Returns (token, base_url) — either may be None if not found.
+    The base URL is returned as-is for the caller to validate/normalize.
+    """
+    if not text:
+        return (None, None)
+    token_match = _BEARER_RE.search(text)
+    url_match = _HTTPS_URL_RE.search(text)
+    token = token_match.group(1) if token_match else None
+    base_url = url_match.group(0) if url_match else None
+    return (token, base_url)
 
 
 def _validate_base_url(url):
@@ -433,10 +453,12 @@ _EMAIL_THREAD_FIELDS = (
 
 @_tool(
     "rossum_set_token",
-    "Set the Rossum API connection for this session. Supports two authentication methods:\n"
+    "Set the Rossum API connection for this session. Supports three authentication methods:\n"
     "1. **API token** (admins): Pass or be prompted for a Bearer token.\n"
     "2. **Username + password** (implementation partners): Pass username and password to "
-    "obtain a session token via Rossum's login API.\n\n"
+    "obtain a session token via Rossum's login API.\n"
+    "3. **Connection string** (admins): Paste a curl snippet from the Rossum admin UI; "
+    "the token and base URL are extracted automatically.\n\n"
     "Prefer calling without arguments — the user will be prompted interactively "
     "for credentials, keeping secrets out of the conversation. "
     "Only pass arguments if the user has already typed them in the chat.",
@@ -462,6 +484,14 @@ _EMAIL_THREAD_FIELDS = (
                     "(e.g. https://elis.rossum.ai). Omit to prompt interactively."
                 ),
             },
+            "connectionString": {
+                "type": "string",
+                "description": (
+                    "A curl snippet containing 'Authorization: Bearer <token>' and an https URL "
+                    "(as shown in the Rossum admin UI). When provided, token and baseUrl are "
+                    "parsed from it and any explicit token/baseUrl arguments are ignored."
+                ),
+            },
         },
         "additionalProperties": False,
     },
@@ -474,6 +504,22 @@ def handle_set_token(request_id, arguments):
     username = arguments.get("username", "")
     password = arguments.get("password", "")
     raw_url = arguments.get("baseUrl", "")
+    connection_string = arguments.get("connectionString", "")
+
+    # Connection string overrides token/baseUrl when provided.
+    if connection_string:
+        parsed_token, parsed_url = _parse_connection_string(connection_string)
+        if not parsed_token or not parsed_url:
+            return tool_result(
+                request_id,
+                "Could not parse connection string. Expected a snippet with "
+                "'Authorization: Bearer <token>' and an https://... URL.",
+                is_error=True,
+            )
+        token = parsed_token
+        raw_url = parsed_url
+        username = ""
+        password = ""
 
     # If we have both token and username+password, prefer token
     if token and username:
@@ -484,35 +530,45 @@ def handle_set_token(request_id, arguments):
     if not token and not username and not raw_url:
         content = _elicit(
             "Enter your Rossum API credentials.\n\n"
-            "**Option A — API token** (admins): fill in API Token and leave Username/Password empty.\n\n"
-            "**Option B — Username & password** (implementation partners): "
-            "fill in Username and Password, leave API Token empty.",
+            "**Option A — Connection string** (admins, fastest): paste a curl snippet from "
+            "the Rossum admin UI into Connection String — token and base URL are extracted "
+            "automatically; leave the other fields empty.\n\n"
+            "**Option B — API token**: fill in API Token + Base URL, leave the rest empty.\n\n"
+            "**Option C — Username & password** (implementation partners): "
+            "fill in Username, Password, and Base URL.",
             {
                 "type": "object",
                 "properties": {
+                    "connectionString": {
+                        "type": "string",
+                        "title": "Connection String",
+                        "description": (
+                            "Paste a curl snippet containing 'Authorization: Bearer <token>' "
+                            "and an https URL. Overrides the other fields when provided."
+                        ),
+                    },
                     "token": {
                         "type": "string",
                         "title": "API Token",
-                        "description": "Rossum API Bearer token (leave empty to use username+password)",
+                        "description": "Rossum API Bearer token (leave empty to use username+password or connection string)",
                     },
                     "username": {
                         "type": "string",
                         "title": "Username",
-                        "description": "Rossum account email (leave empty if using API token)",
+                        "description": "Rossum account email (leave empty if using API token or connection string)",
                     },
                     "password": {
                         "type": "string",
                         "title": "Password",
-                        "description": "Rossum account password (leave empty if using API token)",
+                        "description": "Rossum account password (leave empty if using API token or connection string)",
                     },
                     "baseUrl": {
                         "type": "string",
                         "title": "Base URL",
-                        "description": "e.g. https://elis.rossum.ai",
+                        "description": "e.g. https://elis.rossum.ai (ignored when connection string is set)",
                         "default": "https://elis.rossum.ai",
                     },
                 },
-                "required": ["baseUrl"],
             },
         )
         if content is None:
@@ -521,13 +577,27 @@ def handle_set_token(request_id, arguments):
                 "Credential prompt was cancelled or not supported by this client. "
                 "Call rossum_set_token with explicit arguments instead:\n"
                 "  - With token: rossum_set_token(token='...', baseUrl='...')\n"
-                "  - With login: rossum_set_token(username='...', password='...', baseUrl='...')",
+                "  - With login: rossum_set_token(username='...', password='...', baseUrl='...')\n"
+                "  - With connection string: rossum_set_token(connectionString='curl -H \"Authorization: Bearer ...\" https://...')",
                 is_error=True,
             )
-        token = content.get("token", token)
-        username = content.get("username", username)
-        password = content.get("password", password)
-        raw_url = content.get("baseUrl", raw_url)
+        cs = content.get("connectionString", "")
+        if cs:
+            parsed_token, parsed_url = _parse_connection_string(cs)
+            if not parsed_token or not parsed_url:
+                return tool_result(
+                    request_id,
+                    "Could not parse connection string. Expected a snippet with "
+                    "'Authorization: Bearer <token>' and an https://... URL.",
+                    is_error=True,
+                )
+            token = parsed_token
+            raw_url = parsed_url
+        else:
+            token = content.get("token", token)
+            username = content.get("username", username)
+            password = content.get("password", password)
+            raw_url = content.get("baseUrl", raw_url)
 
     # Interactive prompt when we have credentials but no URL
     if (token or username) and not raw_url:
@@ -2211,7 +2281,7 @@ def main():
                 respond(request_id, {
                     "protocolVersion": "2024-11-05",
                     "capabilities": {"tools": {}},
-                    "serverInfo": {"name": "rossum-api", "version": "0.11.0"},
+                    "serverInfo": {"name": "rossum-api", "version": "0.12.0"},
                     "instructions": (
                         "SAFETY RULE — confirmation before writes: "
                         "Do NOT call any write, update, patch, create, or delete tool "
