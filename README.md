@@ -32,6 +32,21 @@ component (🟢 healthy, 🟡 warning, 🔴 broken).
 /plugin install superpowers@claude-plugins-official
 ```
 
+### Running from a local checkout (feature branch)
+
+To test a feature branch before it's published to the marketplace, clone the repo and point Claude Code at the plugin directories with `--plugin-dir`.
+
+Example using the [`teamd-hackathon`](https://github.com/mrtnzlml/claude-marketplace/tree/teamd-hackathon) branch:
+
+```bash
+git clone -b teamd-hackathon https://github.com/mrtnzlml/claude-marketplace.git rossum-claude-plugin
+
+claude --plugin-dir rossum-claude-plugin/plugins/rossum-sa \
+       --plugin-dir rossum-claude-plugin/plugins/nerossum
+```
+
+Each `--plugin-dir` loads one plugin; omit the ones you don't need.
+
 ## ⚡ Skills
 
 ### `rossum-sa`
@@ -65,6 +80,7 @@ When `rossum-sa` is enabled, Claude automatically gets domain knowledge for:
 - **Export Pipeline (Request Processor)** — multi-stage API integration engine, SFTP export, auth, response handling
 - **Coupa Integration Baseline (CIB)** — schema, MDH matching, export pipeline, business rules
 - **prd2 CLI** — deployment and management commands
+- **Structured Formats Import (SFI)** — XML/JSON import setup, XPath/JMESPath selectors, e-invoicing (ZUGFeRD, X-Rechnung)
 
 ## 💡 What can you do with this?
 
@@ -106,7 +122,7 @@ The MCP server starts automatically when `rossum-sa` is enabled. Write and destr
 
 | Tool | Description |
 |------|-------------|
-| `rossum_set_token` | Authenticate with a Rossum environment (API token or username+password) |
+| `rossum_set_token` | Authenticate with a Rossum environment (API token, username+password, or pasted curl connection string) |
 | `rossum_whoami` | Show authenticated user, organization, and role |
 
 #### Rossum API
