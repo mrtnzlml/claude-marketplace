@@ -1491,6 +1491,14 @@ def handle_list_annotations(request_id, arguments):
                 "type": "integer",
                 "description": "Filter by workspace ID.",
             },
+            "labels": {
+                "type": "integer",
+                "description": (
+                    "Filter by label ID. Returns only annotations that have this "
+                    "label assigned. Useful for checking whether a label is in "
+                    "active use (max_results=1 is enough to confirm presence)."
+                ),
+            },
             "created_at_after": {
                 "type": "string",
                 "description": "Filter: created after this ISO 8601 date (e.g. '2024-01-01T00:00:00Z').",
@@ -1520,7 +1528,7 @@ def handle_search_annotations(request_id, arguments):
     page_size = min(max_results, 100)
 
     params = [("page_size", page_size)]
-    for key in ("queue", "status", "workspace"):
+    for key in ("queue", "status", "workspace", "labels"):
         if key in arguments:
             params.append((key, arguments[key]))
     if "created_at_after" in arguments:

@@ -58,7 +58,8 @@ Each `--plugin-dir` loads one plugin; omit the ones you don't need.
 | `/rossum-sa:document [path]` | Produce a queue-focused reference document |
 | `/rossum-sa:implement` | Plan and execute an integration project end-to-end |
 | `/rossum-sa:refine-deployment [deploy-file] [impl-path]` | Enhance prd2 deploy files with target IDs and attribute overrides |
-| `/rossum-sa:upgrade [path]` | Upgrade deprecated extensions to modern formula fields |
+| `/rossum-sa:upgrade [path]` | Upgrade deprecated extensions to formula fields and bump old Python runtimes on function hooks to `python3.12` |
+| `/rossum-sa:dead-code [path]` | Find unused hooks, formulas, rules, labels, and engines with a deterministic detector |
 
 ### `nerossum`
 
