@@ -11,8 +11,8 @@ Turn Claude into a Rossum implementation partner — audit hooks, analyze schema
 You need [Claude Code CLI](https://code.claude.com/) and a Rossum API token.
 
 ```bash
-/plugin marketplace add mrtnzlml/claude-marketplace
-/plugin install rossum-sa@mrtnzlml-claude-marketplace
+/plugin marketplace add rossumai/claude-marketplace
+/plugin install rossum-sa@rossumai-claude-marketplace
 ```
 
 Then connect and go:
@@ -36,10 +36,10 @@ component (🟢 healthy, 🟡 warning, 🔴 broken).
 
 To test a feature branch before it's published to the marketplace, clone the repo and point Claude Code at the plugin directories with `--plugin-dir`.
 
-Example using the [`teamd-hackathon`](https://github.com/mrtnzlml/claude-marketplace/tree/teamd-hackathon) branch:
+Example using the [`teamd-hackathon`](https://github.com/rossumai/claude-marketplace/tree/teamd-hackathon) branch:
 
 ```bash
-git clone -b teamd-hackathon https://github.com/mrtnzlml/claude-marketplace.git rossum-claude-plugin
+git clone -b teamd-hackathon https://github.com/rossumai/claude-marketplace.git rossum-claude-plugin
 
 claude --plugin-dir rossum-claude-plugin/plugins/rossum-sa \
        --plugin-dir rossum-claude-plugin/plugins/nerossum
