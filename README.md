@@ -12,7 +12,7 @@ You need [Claude Code CLI](https://code.claude.com/) and a Rossum API token.
 
 ```bash
 /plugin marketplace add rossumai/claude-marketplace
-/plugin install rossum-sa@mrtnzlml-claude-marketplace
+/plugin install rossum-sa@rossumai-claude-marketplace
 ```
 
 Then connect and go:
