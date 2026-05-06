@@ -44,17 +44,28 @@ Encapsulates the API quirks discovered in real runs:
    PATCHes status back to `to_review` and proceeds (the dedup hook does not
    re-fire on status change).
 
+7. **Formula re-evaluation requires `POST /content/validate`.** Per-dp PATCH
+   and `/content/operations` mutate values but do NOT re-evaluate formula
+   fields. The dependency graph evaluator runs on `POST
+   /annotations/<id>/content/validate` (this is what the UI triggers when the
+   user types — that's why the Confirm button shows "validating"). Without
+   calling validate, calculated/aggregate formulas remain at their OCR-time
+   values even though their inputs changed. This script POSTs validate after
+   each mutation phase.
+
 Sequence:
 
   1. Pre-flight: dedup-restore if needed.
   2. Apply row ops via /content/operations.
   3. Apply pre-phase replace ops (inputs) via per-dp PATCH.
-  4. Status toggle: PATCH status to `postponed`, then back to `to_review`.
+  4. POST /content/validate to trigger formula re-eval on PATCHed inputs.
+  5. Status toggle: PATCH status to `postponed`, then back to `to_review`.
      The transition fires `annotation_content.started` → MDH and rules re-run
      on the prod-faithful inputs.
-  5. Wait for hooks to settle (configurable, default 20s).
-  6. Apply post-phase replace ops (hook outputs) via per-dp PATCH — these
+  6. Wait for hooks to settle (configurable, default 20s).
+  7. Apply post-phase replace ops (hook outputs) via per-dp PATCH — these
      overwrite the hook-produced values with prod's ground truth.
+  8. POST /content/validate again to re-evaluate formulas after post-hook ops.
 
 Usage:
 
@@ -112,6 +123,20 @@ def get_dp(base, aid, dp_id, token):
     if status != 200:
         return None
     return json.loads(body)
+
+
+def trigger_validate(base, aid, token):
+    """POST /content/validate to force formula re-evaluation.
+
+    Per-dp PATCH and /content/operations don't re-run formula fields; the
+    dependency-graph evaluator only runs when validate is invoked (this is
+    what the UI does as the user types). Returns (ok, error).
+    """
+    status, body = http("POST", f"{base}/annotations/{aid}/content/validate", token, {})
+    if status == 200:
+        return True, None
+    err = body[:200].decode("utf-8", "replace") if isinstance(body, bytes) else str(body)[:200]
+    return False, f"HTTP {status}: {err}"
 
 
 def restore_if_deleted(base, aid, token):
@@ -315,6 +340,8 @@ def main():
         print(f"  --no-toggle set — applying ALL {len(all_ops)} replace ops in one phase (hooks will NOT re-fire)")
         rep_pre = apply_replace_ops(base, aid, all_ops, args.token, verify=not args.no_verify)
         print(f"  replace_ops (single-phase): ok={rep_pre['ok']}/{rep_pre['n_total']} fail={len(rep_pre['fail'])} mismatch={len(rep_pre['mismatch'])}")
+        v_ok, v_err = trigger_validate(base, aid, args.token)
+        print(f"  /content/validate: {'ok' if v_ok else 'fail: ' + str(v_err)}")
         rep_post = {"n_total": 0, "ok": 0, "fail": [], "mismatch": []}
         toggle_result = {"skipped": True}
     else:
@@ -325,7 +352,11 @@ def main():
             for f in rep_pre["fail"][:5]:
                 print(f"    fail: {f}")
 
-        # 4. Status toggle to fire annotation_content.started → MDH/rules re-run on PATCHed inputs
+        # 4a. Force formula re-evaluation on the PATCHed inputs.
+        v_ok, v_err = trigger_validate(base, aid, args.token)
+        print(f"  /content/validate (pre-toggle): {'ok' if v_ok else 'fail: ' + str(v_err)}")
+
+        # 4b. Status toggle to fire annotation_content.started → MDH/rules re-run on PATCHed inputs
         print(f"  status toggle (postponed → to_review) to fire hooks...")
         toggle_ok, toggle_err = status_toggle(base, aid, args.token)
         toggle_result = {"ok": toggle_ok, "error": toggle_err}
@@ -342,6 +373,10 @@ def main():
         if rep_post["fail"]:
             for f in rep_post["fail"][:5]:
                 print(f"    fail: {f}")
+
+        # 6. Final formula re-evaluation after post-hook ops.
+        v_ok2, v_err2 = trigger_validate(base, aid, args.token)
+        print(f"  /content/validate (final): {'ok' if v_ok2 else 'fail: ' + str(v_err2)}")
 
     out = {
         "plan_path": os.path.abspath(args.plan),
