@@ -44,14 +44,17 @@ Encapsulates the API quirks discovered in real runs:
    PATCHes status back to `to_review` and proceeds (the dedup hook does not
    re-fire on status change).
 
-7. **Formula re-evaluation requires `POST /content/validate`.** Per-dp PATCH
-   and `/content/operations` mutate values but do NOT re-evaluate formula
+7. **Formula re-evaluation requires `POST /content/validate` while the
+   annotation is in `reviewing` status.** Per-dp PATCH and
+   `/content/operations` mutate values but do NOT re-evaluate formula
    fields. The dependency graph evaluator runs on `POST
    /annotations/<id>/content/validate` (this is what the UI triggers when the
-   user types — that's why the Confirm button shows "validating"). Without
-   calling validate, calculated/aggregate formulas remain at their OCR-time
-   values even though their inputs changed. This script POSTs validate after
-   each mutation phase.
+   user types — that's why the Confirm button shows "validating"). The
+   endpoint returns HTTP 409 "Document is not being annotated" unless the
+   annotation is in `reviewing` (the state the UI puts it in when a user
+   opens it), so `trigger_validate()` flips status to `reviewing`, calls
+   validate, then restores the prior status. Without this, formulas stay at
+   their OCR-time values even though their inputs changed.
 
 Sequence:
 
@@ -130,13 +133,32 @@ def trigger_validate(base, aid, token):
 
     Per-dp PATCH and /content/operations don't re-run formula fields; the
     dependency-graph evaluator only runs when validate is invoked (this is
-    what the UI does as the user types). Returns (ok, error).
+    what the UI does as the user types).
+
+    The validate endpoint requires the annotation to be in `reviewing` status
+    (it returns HTTP 409 "Document is not being annotated" otherwise — the
+    state the UI puts the annotation into when a user opens it). This helper
+    flips status to `reviewing`, calls validate, then restores the prior
+    status. Returns (ok, error).
     """
-    status, body = http("POST", f"{base}/annotations/{aid}/content/validate", token, {})
-    if status == 200:
+    ann = get_annotation(base, aid, token)
+    prior_status = ann.get("status")
+    flipped = False
+    if prior_status != "reviewing":
+        st, body = http("PATCH", f"{base}/annotations/{aid}", token, {"status": "reviewing"})
+        if st != 200:
+            err = body[:200].decode("utf-8", "replace") if isinstance(body, bytes) else str(body)[:200]
+            return False, f"could not enter reviewing (HTTP {st}: {err})"
+        flipped = True
+    try:
+        status, body = http("POST", f"{base}/annotations/{aid}/content/validate", token, {})
+        if status != 200:
+            err = body[:200].decode("utf-8", "replace") if isinstance(body, bytes) else str(body)[:200]
+            return False, f"HTTP {status}: {err}"
         return True, None
-    err = body[:200].decode("utf-8", "replace") if isinstance(body, bytes) else str(body)[:200]
-    return False, f"HTTP {status}: {err}"
+    finally:
+        if flipped:
+            http("PATCH", f"{base}/annotations/{aid}", token, {"status": prior_status})
 
 
 def restore_if_deleted(base, aid, token):
