@@ -67,10 +67,16 @@ Behavior:
 
 ### `prd2 push [destinations...] [options]`
 
-Uploads locally changed files to Rossum.
+Uploads locally changed files to Rossum. Push handles four operation kinds:
+
+- **CREATE** — new files marked with the `_[]` placeholder convention (see below)
+- **UPDATE** — modifications to files with an existing `_[<id>]`
+- **DELETE** — `git rm` (or `git mv` to a non-resource path) of tracked files
+- **RENAME** — `git mv` of an `_[<id>]` file/folder; collapses to a single UPDATE that preserves the remote object
 
 ```bash
 prd2 push sandbox-org/dev          # push changes to dev
+prd2 push sandbox-org/dev -y       # auto-apply structural changes (CI / non-TTY)
 prd2 push sandbox-org/dev -f       # force push, ignore timestamps
 prd2 push sandbox-org/dev -io      # push only git-indexed files
 ```
@@ -80,15 +86,86 @@ prd2 push sandbox-org/dev -io      # push only git-indexed files
 | `-a` / `--all` | Upload all local files, not just modified ones |
 | `-f` / `--force` | Ignore newer remote timestamps, overwrite remote |
 | `-io` / `--indexed-only` | Push only files added to git index |
-| `-c` / `--commit` | Auto-commit after push |
+| `-y` / `--yes` | Skip the interactive confirmation prompt for plans containing CREATE or DELETE |
+| `-c` / `--commit` | Auto-commit after push (skipped if any directory failed) |
 | `-m` / `--message` | Custom commit message (default: "Pushed changes to remote") |
 | `--concurrency` | Max concurrent API requests |
 
-Behavior:
-- Uses `git status` to detect changed files
-- Merges formula field code and hook code changes back into their JSON before pushing
-- Compares `modified_at` timestamps unless `-f` is used
-- Automatically does a `pull` after successful push to sync timestamps
+Pipeline (per directory):
+
+1. **Detect** — uses `git status -s` to find changed files (`R*` rename op codes are split into a (D old, ?? new) pair).
+2. **Merge** — folds `.py` / `.js` hook code and `formulas/*.py` formula code back into their JSON. New hooks created with both `.json` and `.py` are deduplicated to a single CREATE.
+3. **Classify** — decides CREATE vs UPDATE vs DELETE vs RENAME for each change. Pairs `(D old_id, ?? new_id)` from `git mv` into a single UPDATE so the remote object is not destroyed and recreated.
+4. **Validate** — pre-flight checks before any API call: required fields, sibling-schema-for-new-queue, parent-queue-for-new-schema/inbox, parent-engine-for-new-engine-field, hook runtime/code consistency, duplicate names within parent, and delete-under-create conflicts. Validation errors abort the push for that directory before any API call is made.
+5. **Plan** — renders a CREATE/UPDATE/DELETE plan to the terminal.
+6. **Confirm** — if the plan contains structural changes (any CREATE or DELETE), prompts for confirmation. UPDATE-only plans skip the prompt. `--yes` skips the prompt unconditionally. **In a non-TTY shell (CI, piped runs, agents) without `--yes`, the push aborts cleanly with a "stdin is non-interactive" message — pass `--yes` for automation.**
+7. **Apply** — executes the plan:
+   - **CREATEs** are sequential in topo order (Workspace → Engine → EngineField → Schema → Queue → Inbox → Hook → Rule). On any CREATE failure, the rest of the CREATE phase is aborted (UPDATEs and DELETEs do not run for that directory).
+   - **UPDATEs** run concurrently. The `modified_at` timestamp is compared unless `-f` is used (skipped for renames since the path-based timestamp key won't exist post-rename).
+   - **DELETEs** run by-type-bucket in reverse topo order (Rule → Hook → Inbox → Queue → Schema → EngineField → Engine → Workspace). Within a bucket, concurrent. **Queues use `?delete_after=0` (hard delete) and poll until the row is gone**, so the schema/inbox DELETEs that follow don't 409 against a deletion-pending queue. If the queue isn't gone within 30s, the push aborts and can be re-run.
+   - 404 responses on DELETE are treated as success (cascade-already-deleted).
+8. **Pull** — after a successful push, automatically pulls the directory to sync timestamps and write back any server-generated state (e.g. new IDs into `_[<id>]` filenames).
+
+If any directory fails, both the post-push pull and the auto-commit step (`-c`) are skipped — the working tree is left dirty for inspection.
+
+#### Creating new objects with `_[]` placeholders
+
+To create a new Rossum object via push, write the local file with `_[]` instead of an ID. The placeholder marks the file as "create this on remote." Push will POST the object, receive the real ID, and rename the placeholder to `_[<real_id>]` on disk.
+
+```
+workspaces/My New WS_[]/workspace.json                    # creates a workspace
+workspaces/My New WS_[]/queues/My New Queue_[]/queue.json # nested in same push
+workspaces/My New WS_[]/queues/My New Queue_[]/schema.json
+hooks/My New Hook_[].json                                 # creates a hook
+hooks/My New Hook_[].py                                   # code for it
+rules/My New Rule_[].json
+engines/My New Engine_[1234]/engine_fields/My Field_[].json  # field under existing engine
+```
+
+Rules:
+
+- The placeholder is `_[]` (open + close brackets, empty between). Folder-based types (`Workspace`, `Queue`, `Engine`) carry `_[]` on their parent folder; file-based types (`Hook`, `Rule`, `EngineField`) carry it on the file stem.
+- A new file's JSON must NOT contain `id` or `url` fields — push will reject it with a clear error. Strip them from any pulled-then-renamed file.
+- A new queue requires a sibling `schema.json` in the same `_[]` folder.
+- Required fields the user must hand-write in the JSON (validation catches missing ones pre-flight):
+  - **Workspace:** `name`, `organization` (the organization URL — there's no filesystem analog, must be supplied)
+  - **Queue:** `name` (`workspace` and `schema` URLs are auto-resolved from the parent folder and sibling `schema.json`)
+  - **Schema:** `name`, `content`
+  - **Inbox:** `name`, plus **one of** `email_prefix` or `email` (the API enforces this cross-field rule; `queues` is auto-resolved from the parent queue folder)
+  - **Hook:** `name`, `events`, `queues` (may be `[]`), `config`. The `type` field is optional and defaults to `webhook`. For `webhook`-type hooks, `config` must contain a `url`. For `function`-type hooks, `config` must contain a `runtime` (e.g. `python3.12`).
+  - **Rule:** `name`
+  - **Engine:** `name`, `description`
+  - **EngineField:** `name` (`engine` URL is auto-resolved from the parent engine folder)
+- Cross-references between newly-created sibling objects (e.g. queue → workspace URL, queue → schema URL, inbox → queue URL, engine_field → engine URL) are resolved automatically from the local filesystem. You don't need to fill them in.
+- Inbox is a special case: filenames don't carry `_[]` (they're literally `inbox.json`). A no-id `inbox.json` under an existing `_[<queue_id>]/` folder is recognized as a CREATE.
+
+#### Deleting objects
+
+`git rm` (or `git rm -r`) the tracked file/folder, then push:
+
+```bash
+git rm -r "workspaces/Old Workspace_[1234]"
+prd2 push sandbox-org/dev
+```
+
+- The file must be **tracked** (committed at least once) for the DELETE to be detected. Removing untracked files just makes them disappear from git's view; push won't notice.
+- Schema and Inbox files don't carry IDs in their filenames — push recovers their IDs from git history (staged version first, then HEAD).
+- DELETE skips the `modified_at` timestamp check (the local file is gone, so there's nothing to compare). Reaching the apply phase implies the user confirmed the plan.
+
+#### Renaming objects
+
+`git mv` an `_[<id>]` file or folder to a new name:
+
+```bash
+git mv "hooks/Old Hook_[706813].json" "hooks/Renamed Hook_[706813].json"
+git mv "hooks/Old Hook_[706813].py" "hooks/Renamed Hook_[706813].py"
+# Update the "name" field in the JSON to match
+prd2 push sandbox-org/dev
+```
+
+- Push collapses the `(D old, ?? new)` pair from `git mv` into a single UPDATE that preserves the remote object's ID. The remote object is **not** destroyed and recreated.
+- The file's `name` field must be updated to match the new local name; the rename only affects on-disk paths, not the remote `name` attribute.
+- Companion `.py` / `.js` files for hooks should be renamed alongside the JSON.
 
 ### `prd2 deploy template create [options]`
 
@@ -455,9 +532,13 @@ Key differences from prd v1:
 1. `prd2 init my-project` — create project, configure orgs and subdirectories
 2. Add API tokens to `credentials.yaml` in each org directory
 3. `prd2 pull sandbox-org --all` — download current state
-4. Make changes in Rossum UI or edit local files
-5. `prd2 pull sandbox-org/dev` — sync any remote changes
-6. `prd2 push sandbox-org/dev` — upload local changes to source
+4. Make changes:
+   - To **edit existing** objects: edit the local files (`.py` for code, JSON for everything else) — IDs are already in the filenames.
+   - To **create new** objects: write the file under a `_[]`-suffixed folder/filename (see "Creating new objects" above). Push will POST and rename to `_[<real_id>]`.
+   - To **rename** an object: `git mv` the `_[<id>]` file/folder, update the JSON's `name` field. Push collapses to a single UPDATE.
+   - To **delete** an object: `git rm` the file/folder. Must be tracked first.
+5. `prd2 pull sandbox-org/dev` — sync any remote changes (or skip if you only made local changes)
+6. `prd2 push sandbox-org/dev` — upload local changes; review the plan and confirm. In CI / non-TTY contexts, pass `-y`.
 7. Test in source environment
 8. `prd2 deploy template create` — create deploy file (first time)
 9. `prd2 deploy template update -i ./deploy_files/dev_test.yaml` — update deploy file if objects changed

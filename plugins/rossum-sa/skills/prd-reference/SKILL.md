@@ -20,8 +20,9 @@ Use this knowledge when:
 - Working with `prd2` CLI commands (pull, push, deploy, purge, hook, etc.)
 - Setting up deployment pipelines for Rossum configurations
 - Pulling or pushing Rossum objects (schemas, hooks, queues, workspaces, rules, labels, engines)
+- **Creating, deleting, or renaming Rossum objects via `prd2 push` directly** — using the `_[]` placeholder convention to create, `git rm` to delete, `git mv` to rename
 - Deploying configurations between environments using deploy files
 - Configuring `prd_config.yaml`, `credentials.yaml`, or deploy YAML files
 - Using attribute overrides (static, regex with `/#/` separator, `$prd_ref`, `$source_value`)
 - Debugging deployment or sync issues between environments
-- Writing CI/CD pipelines that automate Rossum deployments
+- Writing CI/CD pipelines that automate Rossum deployments (use `-y` / `--yes` to skip the structural-changes prompt)
