@@ -55,9 +55,11 @@ External HTTPS egress from hook Lambdas may be disabled at the organization leve
 
 **Fix:** Contact Rossum support to enable external egress for the organization. Hooks require redeploy after the change to inherit the new permission.
 
+To confirm the diagnosis before opening a ticket: add a temporary `call_api` stage targeting `https://httpbin.org/get`. A Lambda timeout with no HTTP status (`FunctionException: Read timeout on endpoint URL...`) confirms egress is blocked; a 200 response means the issue is elsewhere.
+
 ### Hook-level: `token_owner` for Rossum API access
 
-Function hooks that use `{payload.rossum_authorization_token}` (e.g. SFTP Export pattern, OAuth token cache writes back to hook secrets) require `token_owner` to be set on the hook. Without it, the token field is absent from the payload.
+Function hooks that use `{payload.rossum_authorization_token}` (e.g. SFTP Export, or OAuth flows that cache tokens via `update_hook_secrets`) require `token_owner` to be set on the hook. Without it, the token field is absent from the payload.
 
 **Symptom:** `KeyError: 'rossum_authorization_token'` on first invocation; OAuth flow cannot persist `update_hook_secrets`.
 
@@ -65,7 +67,7 @@ Function hooks that use `{payload.rossum_authorization_token}` (e.g. SFTP Export
 
 ### Hook-level: `sideload: ["schemas"]`
 
-The Request Processor requires schema sideloading on the hook.
+The Request Processor requires schema sideloading on the hook. (Response handlers also depend on the schema being present — see the [`schema_id` target callout](#response-handlers) below.)
 
 **Symptom:** `PayloadError: Schema sideloading must be enabled!`
 
@@ -134,7 +136,7 @@ When a variable resolves to a URL, use `.@` to fetch its content:
 **Rules:**
 - `.url` ending → returns URL string (no fetch)
 - `.@` operator → fetches the URL content (mandatory for accessing properties of fetched objects)
-- **Same-origin only.** Fetches are restricted to URLs whose domain matches the hook's `base_url` (last two domain components must match — e.g. `api.elis.rossum.ai` matches `elis.rossum.ai`). Cross-origin URLs return `None` silently — use a `call_api` stage with an explicit request to fetch from third-party hosts.
+- **Restricted to the hook's parent domain.** The fetch is allowed only when the URL's hostname shares the same final two dot-separated components as the hook's `base_url` (e.g. a hook on `elis.rossum.ai` can fetch anything ending in `rossum.ai`, including `api.elis.rossum.ai`; it cannot fetch `httpbin.org` or `*.rossum.app`). URLs that don't match return `None` silently — use a `call_api` stage with an explicit request to fetch from third-party hosts.
 
 ### Function Wrappers
 
@@ -522,7 +524,7 @@ Process API responses and extract/store data.
 | `property` | Store in property context | Available in later stages via `{property.key}` |
 | `document_relation` | Save response as new Rossum document | Creates/updates relation with given key |
 
-> **Important — `schema_id` targets must already exist in the schema.** Response handlers with `target_type: "schema_id"` use Python `setattr` on the annotation field tree. If `target_key` names a field that does not exist, the handler raises `AttributeError`, `exception_occurred` becomes true, and the export fails with the generic user-visible message `"Some exception occurred during during export pipeline"` — with no hint about which field is missing.
+> **Important — `schema_id` targets must already exist in the schema.** Response handlers with `target_type: "schema_id"` use Python `setattr` on the annotation field tree. If `target_key` names a field that does not exist, the handler raises `AttributeError`, `exception_occurred` becomes true, and the export fails with the generic Automation Blocker message `"Some exception occurred during during export pipeline"` *(verbatim — the duplicated "during" is in the source)* — with no hint about which field is missing.
 >
 > Before referencing fields like `api1_status_code` or `api1_response_body` in a response handler, add them as schema fields with `ui_configuration.type: "data"` (hidden from the UI). The `"data"` type also avoids the "field has no extraction source" validation warning that `"captured"` would trigger for hook-populated fields.
 
